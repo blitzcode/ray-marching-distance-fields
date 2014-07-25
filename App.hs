@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, RankNTypes #-}
 
 module App ( AppState(..)
            , AppEnv(..)
@@ -8,14 +8,19 @@ module App ( AppState(..)
            , run
            ) where
 
+import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.STM
+import Control.Monad.ST
+import qualified Data.Vector.Storable.Mutable as VSM
+import qualified Data.Vector.Storable as VS
 import Control.Concurrent.STM.TQueue
 import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
+import Data.Monoid
 
 import GLFWHelpers
 import GLHelpers
@@ -36,8 +41,8 @@ data AppEnv = AppEnv { aeWindow          :: GLFW.Window
 
 -- Our application runs in a reader / state / IO transformer stack
 
-type AppT m a = StateT AppState (ReaderT AppEnv m) a
-type AppIO a = AppT IO a
+type AppT m = StateT AppState (ReaderT AppEnv m)
+type AppIO = AppT IO
 
 runAppT :: Monad m => AppState -> AppEnv -> AppT m a -> m a
 runAppT s e f = flip runReaderT e . flip evalStateT s $ f
@@ -88,6 +93,22 @@ draw = do
         GL.clearColor GL.$= (GL.Color4 1 1 1 1 :: GL.Color4 GL.GLclampf)
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
+
+    {-
+    let toPixels = (\x -> if x then 0x00FFFFFF else 0x00000000) :: Bool -> Word32
+        arr = VS.convert $ VU.map toPixels grid
+        size = GL.Size (fromIntegral w) (fromIntegral h)
+    assert (w * h == VS.length arr) $ VS.unsafeWith arr (\ptr ->
+        GL.drawPixels size (GL.PixelData GL.RGBA GL.UnsignedByte ptr))
+    -}
+
+    let abc :: VS.Vector Int
+        abc = runST $ do
+                  v <- VSM.new 1024 :: forall s. ST s (VSM.MVector s Int)
+                  VSM.write v 0 1000
+                  VS.freeze v
+
+
     updateAndDrawFrameTimes
 
 updateAndDrawFrameTimes :: AppIO ()
@@ -107,6 +128,20 @@ updateAndDrawFrameTimes = do
         (1.0 / fdMean ) (fdMean  * 1000)
         (1.0 / fdWorst) (fdWorst * 1000)
         (1.0 / fdBest ) (fdBest  * 1000)
+
+{-
+newtype DList a =  DList { getDList :: [a] -> [a] }
+
+instance Monoid (DList a) where
+    mempty = DList $ \xs -> xs
+    mappend a b = DList $ \xs -> getDList a (getDList b xs)
+
+toDList :: [a] -> DList a
+toDList a = DList (a ++)
+
+fromDList :: DList a -> [a]
+fromDList dl = getDList dl []
+-}
 
 run :: AppIO ()
 run = do

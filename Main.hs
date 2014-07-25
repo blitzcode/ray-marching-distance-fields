@@ -17,6 +17,7 @@ import GLHelpers
 import Timing
 import Font
 import qualified BoundedSequence as BS
+import LensTest
 
 runOnAllCores :: IO ()
 runOnAllCores = GHC.Conc.getNumProcessors >>= setNumCapabilities
@@ -40,6 +41,7 @@ traceSystemInfo = do
 
 main :: IO ()
 main = do
+    runLensTest
     runOnAllCores
     withTrace Nothing True False True TLInfo $ do
       aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
