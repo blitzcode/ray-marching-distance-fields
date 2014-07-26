@@ -10,8 +10,6 @@ module GLHelpers ( setup2D
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Control.Applicative
-import Control.Monad
-import Control.Monad.Error
 import Control.Exception
 import Text.Printf
 import Data.Maybe
@@ -22,7 +20,7 @@ import Trace
 
 setup2D :: Int -> Int -> IO ()
 setup2D w h = do
-    GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
+    GL.viewport   GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
     GL.matrixMode GL.$= GL.Projection
     GL.loadIdentity
     -- GLU.ortho2D 0.0 (fromIntegral w) 0.0 (fromIntegral h)
@@ -31,21 +29,15 @@ setup2D w h = do
 getErrors :: Maybe String -> IO (Maybe String)
 getErrors context =
     GL.get GL.errors >>= \case
-        [] -> return Nothing
+        []  -> return Nothing
         err -> return . Just $
                    "OpenGL Error" ++ maybe ": " (\c -> " (" ++ c ++ "): ") context ++ show err
 
 traceOnGLError :: Maybe String -> IO ()
-traceOnGLError context =
-    getErrors context >>= \case
-        Nothing -> return ()
-        Just err -> traceS TLError err
+traceOnGLError context = getErrors context >>= maybe (return ()) (traceS TLError)
 
 throwOnGLError :: Maybe String -> IO ()
-throwOnGLError context =
-    getErrors context >>= \case
-        Nothing -> return ()
-        Just err -> error err
+throwOnGLError context = getErrors context >>= maybe (return ()) (throwIO . ErrorCall)
 
 getGLStrings :: IO String
 getGLStrings =
