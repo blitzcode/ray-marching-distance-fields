@@ -44,13 +44,13 @@ main = do
     runLensTest
     runOnAllCores
     withTrace Nothing True False True TLInfo $ do
-      aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
-      withWindow 640 320 "Fractal" aeGLFWEventsQueue $ \aeWindow -> do
+      _aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
+      withWindow 640 320 "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
         traceSystemInfo
-        withFontTexture $ \aeFontTexture -> do
-          asCurTick <- getTick
-          let as = AppState { asLastEscPress = -1
-                            , asFrameTimes = BS.empty 250 -- Average over last 250 FPS
+        withFontTexture $ \_aeFontTexture -> do
+          _asCurTick <- getTick
+          let as = AppState { _asLastEscPress = -1
+                            , _asFrameTimes = BS.empty 250 -- Average over last 250 FPS
                             , ..
                             }
               ae = AppEnv { .. }

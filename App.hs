@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, RankNTypes #-}
+{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell #-}
 
 module App ( AppState(..)
            , AppEnv(..)
@@ -29,15 +29,18 @@ import Trace
 import Font
 import qualified BoundedSequence as BS
 
-data AppState = AppState { asCurTick      :: Double
-                         , asLastEscPress :: Double
-                         , asFrameTimes   :: BS.BoundedSequence Double
+data AppState = AppState { _asCurTick      :: !Double
+                         , _asLastEscPress :: !Double
+                         , _asFrameTimes   :: BS.BoundedSequence Double
                          }
 
-data AppEnv = AppEnv { aeWindow          :: GLFW.Window
-                     , aeGLFWEventsQueue :: TQueue GLFWEvent
-                     , aeFontTexture     :: GL.TextureObject
+data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
+                     , _aeGLFWEventsQueue :: TQueue GLFWEvent
+                     , _aeFontTexture     :: GL.TextureObject
                      }
+
+makeLenses ''AppState
+makeLenses ''AppEnv
 
 -- Our application runs in a reader / state / IO transformer stack
 
@@ -58,19 +61,19 @@ processGLFWEvent :: GLFWEvent -> AppIO ()
 processGLFWEvent ev =
     case ev of
         GLFWEventError e s -> do
-           window <- asks aeWindow
+           window <- view aeWindow
            liftIO $ do
                traceS TLError $ "GLFW Error " ++ show e ++ " " ++ show s
                GLFW.setWindowShouldClose window True
         GLFWEventKey win k {- sc -} _ ks {- mk -} _ ->
            when (ks == GLFW.KeyState'Pressed) $ do
                when (k == GLFW.Key'Escape) $ do
-                   lastPress <- gets asLastEscPress
-                   tick <- gets asCurTick
+                   lastPress <- use asLastEscPress
+                   tick      <- use asCurTick
                    -- Only close when ESC has been pressed twice quickly
                    when (tick - lastPress < 0.5) .
                        liftIO $ GLFW.setWindowShouldClose win True
-                   modify' $ \s -> s { asLastEscPress = tick }
+                   asLastEscPress .= tick
         GLFWEventWindowSize {- win -} _ w h -> do
             -- TODO: Window resizing blocks event processing,
             -- see https://github.com/glfw/glfw/issues/1
@@ -115,15 +118,15 @@ updateAndDrawFrameTimes :: AppIO ()
 updateAndDrawFrameTimes = do
     AppEnv   { .. } <- ask
     AppState { .. } <- get
-    modify' $ \s -> s { asFrameTimes = BS.push_ asCurTick asFrameTimes }
-    let frameTimes       = BS.toList $ asFrameTimes
+    asFrameTimes %= BS.push_ _asCurTick
+    let frameTimes       = BS.toList _asFrameTimes
         frameDeltas      = case frameTimes of (x:xs) -> goFD x xs; _ -> []
         goFD prev (x:xs) = (prev - x) : goFD x xs
         goFD _ []        = []
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
-    liftIO . drawText aeFontTexture 3 1 0x00000000 $ printf
+    liftIO . drawText _aeFontTexture 3 1 0x00000000 $ printf
         "Mean: %.1fFPS/%.1fms | Worst: %.1fFPS/%.1fms | Best: %.1fFPS/%.1fms\n"
         (1.0 / fdMean ) (fdMean  * 1000)
         (1.0 / fdWorst) (fdWorst * 1000)
@@ -146,7 +149,7 @@ fromDList dl = getDList dl []
 run :: AppIO ()
 run = do
     -- Setup OpenGL / GLFW
-    window <- asks aeWindow
+    window <- view aeWindow
     liftIO $ do
         (w, h) <- GLFW.getFramebufferSize window
         GLFW.swapInterval 1
@@ -154,16 +157,16 @@ run = do
     -- Main loop
     let loop = do
           time <- liftIO $ getTick
-          modify' $ \s -> s { asCurTick = time }
+          asCurTick .= time
           -- GLFW / OpenGL
           draw
           liftIO $ {-# SCC swapAndPoll #-} do
-              GL.flush
-              GL.finish
+              -- GL.flush
+              -- GL.finish
               GLFW.swapBuffers window
               GLFW.pollEvents
               traceOnGLError $ Just "main loop"
-          tqGLFW <- asks aeGLFWEventsQueue
+          tqGLFW <- view aeGLFWEventsQueue
           processAllEvents tqGLFW processGLFWEvent
           -- Done?
           flip unless loop =<< liftIO (GLFW.windowShouldClose window)
