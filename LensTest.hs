@@ -7,13 +7,14 @@ import Control.Lens
 import Control.Applicative
 import Control.Monad.State hiding (State)
 import Control.Monad.Reader
-import Control.Monad
+import qualified Data.Map as M
 
 import qualified Data.Vector.Unboxed.Mutable as VUM
 
 data State = State { _stSomeInt :: Int
                    , _stFloatPair :: (Float, Float)
                    , _stIntList :: [Int]
+                   , _stMap :: M.Map String Int
                    }
 
 data Env = Env { _envConstInt :: Int
@@ -26,7 +27,7 @@ makeLenses ''Env
 zoomTest :: StateT (Float, Float) (ReaderT Env IO) ()
 zoomTest = do
     a <- use _1
-    _1 += 5
+    _1 += 5 + a
     _2 += 5
 
 zoomTest2 :: (MonadState (Float, Float) m, Applicative m) => m Float
@@ -53,17 +54,33 @@ evenPrism :: (Integral a) => Prism' a a
 evenPrism = prism id $ \i -> if even i then Right i else Left i
 -- [0, 1, 2, 3, 4, 5] & mapped.evenPrism .~ 0
 -- [0, 1, 2, 3, 4, 5] ^.. traversed.evenPrism
+-- [1..10]^..traversed.filtered even :: [Int]
+
+{-
+[1..] & traverse.filtered odd +~ 1
+
+will violate the traversal laws, because e.g.
+
+[1..] & traverse.filtered odd +~ 1 & traverse.filtered odd +~ 1
+
+fails to equal
+
+[1..] & traverse.filtered odd +~ 2
+-}
 
 runLensTest :: IO ()
 runLensTest = do
     newVec <- VUM.new 100
-    void . flip runReaderT (Env 0 newVec) . flip runStateT (State 0 (0, 0) []) $ do
+    void . flip runReaderT (Env 0 newVec) . flip runStateT (State 0 (0, 0) [] (M.fromList [("one", 1), ("two", 2)])) $ do
         --envVUM ^! act (\v -> VUM.write v 0 0)
+        stMap.at "one" .= Just 2
+        (liftIO . print) =<< gets _stMap
         view envVUM >>= (\v -> liftIO $ VUM.write v 0 0)
-        ci <- view envConstInt
+        _ <- view envConstInt
+        stFloatPair.both %= succ
         stSomeInt .= 5
         stFloatPair._1 += 1
-        tmp <- stFloatPair._1 <+= 1
+        _ <- stFloatPair._1 <+= 1
         stIntList.mapped %= (+ 1)
         modify' (\s -> s & stFloatPair._1 +~ 1)
         sint <- use stSomeInt
