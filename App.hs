@@ -103,48 +103,33 @@ draw = do
         size = GL.Size (fromIntegral w) (fromIntegral h)
     assert (w * h == VS.length arr) $ VS.unsafeWith arr (\ptr ->
         GL.drawPixels size (GL.PixelData GL.RGBA GL.UnsignedByte ptr))
-    -}
 
     let abc :: VS.Vector Int
         abc = runST $ do
                   v <- VSM.new 1024 :: forall s. ST s (VSM.MVector s Int)
                   VSM.write v 0 1000
                   VS.freeze v
-
+    -}
 
     updateAndDrawFrameTimes
 
 updateAndDrawFrameTimes :: AppIO ()
 updateAndDrawFrameTimes = do
-    AppEnv   { .. } <- ask
-    AppState { .. } <- get
-    asFrameTimes %= BS.push_ _asCurTick
-    let frameTimes       = BS.toList _asFrameTimes
-        frameDeltas      = case frameTimes of (x:xs) -> goFD x xs; _ -> []
+    frameTimes <- use $ asFrameTimes.to BS.toList
+    curTick    <- use asCurTick
+    asFrameTimes %= BS.push_ curTick
+    let frameDeltas      = case frameTimes of (x:xs) -> goFD x xs; _ -> []
         goFD prev (x:xs) = (prev - x) : goFD x xs
         goFD _ []        = []
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
-    liftIO . drawText _aeFontTexture 3 1 0x00000000 $ printf
+    fontTex <- view aeFontTexture
+    liftIO . drawText fontTex 3 1 0x00000000 $ printf
         "Mean: %.1fFPS/%.1fms | Worst: %.1fFPS/%.1fms | Best: %.1fFPS/%.1fms\n"
         (1.0 / fdMean ) (fdMean  * 1000)
         (1.0 / fdWorst) (fdWorst * 1000)
         (1.0 / fdBest ) (fdBest  * 1000)
-
-{-
-newtype DList a =  DList { getDList :: [a] -> [a] }
-
-instance Monoid (DList a) where
-    mempty = DList $ \xs -> xs
-    mappend a b = DList $ \xs -> getDList a (getDList b xs)
-
-toDList :: [a] -> DList a
-toDList a = DList (a ++)
-
-fromDList :: DList a -> [a]
-fromDList dl = getDList dl []
--}
 
 run :: AppIO ()
 run = do
