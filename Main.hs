@@ -18,6 +18,7 @@ import Timing
 import Font
 import qualified BoundedSequence as BS
 import LensTest
+import ContTTest
 
 runOnAllCores :: IO ()
 runOnAllCores = GHC.Conc.getNumProcessors >>= setNumCapabilities
@@ -41,6 +42,9 @@ traceSystemInfo = do
 
 main :: IO ()
 main = do
+    runContTTest
+
+    {-
     runLensTest
     runOnAllCores
     withTrace Nothing True False True TLInfo $ do
@@ -55,4 +59,4 @@ main = do
                             }
               ae = AppEnv { .. }
            in runAppT as ae run
-
+    -}
