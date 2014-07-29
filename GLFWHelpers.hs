@@ -17,7 +17,7 @@ withWindow w h title tq =
              True <- GLFW.init
              -- GLFW.windowHint $ GLFW.WindowHint'Samples 4
              -- GLFW.windowHint $ GLFW.WindowHint'Decorated False
-             GLFW.windowHint $ GLFW.WindowHint'Resizable True
+             GLFW.windowHint $ GLFW.WindowHint'Resizable False
              -- >2.1, no backwards compatibility
              --
              -- GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core

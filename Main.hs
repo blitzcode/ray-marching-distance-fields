@@ -16,6 +16,7 @@ import GLFWHelpers
 import GLHelpers
 import Timing
 import Font
+import FrameBuffer
 import qualified BoundedSequence as BS
 
 runOnAllCores :: IO ()
@@ -47,12 +48,13 @@ main = do
           h = truncate $ (640 * 0.8 :: Float)
        in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
         traceSystemInfo
-        withFontTexture $ \_aeFontTexture -> do
-          _asCurTick <- getTick
-          let as = AppState { _asLastEscPress = -1
-                            , _asFrameTimes = BS.empty 250 -- Average over last 250 FPS
-                            , ..
-                            }
-              ae = AppEnv { .. }
-           in runAppT as ae run
+        withFontTexture $ \_aeFontTexture ->
+          withFrameBuffer w h $ \_aeFB -> do
+            _asCurTick <- getTick
+            let as = AppState { _asLastEscPress = -1
+                              , _asFrameTimes = BS.empty 250 -- Average over last 250 FPS
+                              , ..
+                              }
+                ae = AppEnv { .. }
+             in runAppT as ae run
 
