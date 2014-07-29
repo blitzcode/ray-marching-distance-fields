@@ -9,18 +9,19 @@ module App ( AppState(..)
            ) where
 
 import Control.Lens
+import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.STM
-import Control.Monad.ST
-import qualified Data.Vector.Storable.Mutable as VSM
-import qualified Data.Vector.Storable as VS
 import Control.Concurrent.STM.TQueue
 import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
-import Data.Monoid
+import Data.Word
+import Data.List
+import Data.Complex
+import qualified Data.Vector.Storable.Mutable as VSM
 
 import GLFWHelpers
 import GLHelpers
@@ -97,19 +98,20 @@ draw = do
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
 
-    {-
-    let toPixels = (\x -> if x then 0x00FFFFFF else 0x00000000) :: Bool -> Word32
-        arr = VS.convert $ VU.map toPixels grid
-        size = GL.Size (fromIntegral w) (fromIntegral h)
-    assert (w * h == VS.length arr) $ VS.unsafeWith arr (\ptr ->
-        GL.drawPixels size (GL.PixelData GL.RGBA GL.UnsignedByte ptr))
-
-    let abc :: VS.Vector Int
-        abc = runST $ do
-                  v <- VSM.new 1024 :: forall s. ST s (VSM.MVector s Int)
-                  VSM.write v 0 1000
-                  VS.freeze v
-    -}
+    (w, h) <- (liftIO . GLFW.getFramebufferSize) =<< view aeWindow
+    liftIO $ do
+        fb <- VSM.new $ w * h :: IO (VSM.IOVector Word32)
+        forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
+            let idx = px + py * w
+                x   = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
+                y   = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
+                c   = x :+ y
+                i   = foldl' (\a _ -> a * a + c) (0 :+ 0) [1..100]
+             in VSM.write fb idx $ if (realPart i) < 2 then 0x00FF0000 else 0x0000FF00 -- ABGR
+        GL.windowPos (GL.Vertex2 0 0 :: GL.Vertex2 GL.GLint)
+        assert (w * h == VSM.length fb) . VSM.unsafeWith fb $
+            GL.drawPixels (GL.Size (fromIntegral w) (fromIntegral h))
+                          . GL.PixelData GL.RGBA GL.UnsignedByte
 
     updateAndDrawFrameTimes
 
@@ -124,12 +126,15 @@ updateAndDrawFrameTimes = do
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
+        stats            =
+          printf
+            "Mean: %.1fFPS/%.1fms | Worst: %.1fFPS/%.1fms | Best: %.1fFPS/%.1fms\n"
+            (1.0 / fdMean ) (fdMean  * 1000)
+            (1.0 / fdWorst) (fdWorst * 1000)
+            (1.0 / fdBest ) (fdBest  * 1000)
     fontTex <- view aeFontTexture
-    liftIO . drawText fontTex 3 1 0x00000000 $ printf
-        "Mean: %.1fFPS/%.1fms | Worst: %.1fFPS/%.1fms | Best: %.1fFPS/%.1fms\n"
-        (1.0 / fdMean ) (fdMean  * 1000)
-        (1.0 / fdWorst) (fdWorst * 1000)
-        (1.0 / fdBest ) (fdBest  * 1000)
+    liftIO $ drawText fontTex 4 0 0x00000000 stats
+    liftIO $ drawText fontTex 3 1 0x00FFFFFF stats
 
 run :: AppIO ()
 run = do
@@ -137,7 +142,7 @@ run = do
     window <- view aeWindow
     liftIO $ do
         (w, h) <- GLFW.getFramebufferSize window
-        GLFW.swapInterval 1
+        GLFW.swapInterval 0
         setup2D w h
     -- Main loop
     let loop = do
