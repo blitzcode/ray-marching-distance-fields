@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell, BangPatterns #-}
 
 module App ( AppState(..)
            , AppEnv(..)
@@ -9,6 +9,7 @@ module App ( AppState(..)
            ) where
 
 import Control.Lens
+import Control.Loop
 import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
@@ -162,17 +163,20 @@ draw = do
 
     fb <- view aeFB
 
-    fillFrameBuffer fb $ \w h fb -> do
-        forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
+    void $ fillFrameBuffer fb $ \w h fb -> do
+        --forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
+        --numLoop 0 (h - 1) $ \py -> numLoop 0 (w - 1) $ \px ->
+        forLoop 0 (< h) (+1) $ \py -> forLoop 0 (< w) (+1) $ \px ->
             let idx = px + py * w
                 x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
                 c = x :+ y
-                i = go 0 (0 :+ 0)
-                go iter z | (iter > 49) || (realPart z * realPart z + imagPart z * imagPart z > 2*2) = iter
-                          | otherwise = go (iter + 1) $ z * z + c
-             in liftIO . VSM.write fb idx $ (truncate ((fromIntegral i) / 50 * 255 :: Float) :: Word32) `shiftL` 8
-             --in liftIO . VSM.write fb idx $ if i < 2 then 0x00FF0000 else 0x00007F00 -- ABGR
+                maxIter = 50
+                i = go (0 :: Int) (0 :+ 0)
+                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 2*2) = iter
+                          | otherwise = let newZ = z * z + c
+                                         in if newZ == z then maxIter else go (iter + 1) newZ
+             in liftIO . VSM.unsafeWrite fb idx $ (truncate ((fromIntegral i) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
         {-
         forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
             let idx = px + py * w

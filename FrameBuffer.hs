@@ -22,7 +22,7 @@ import GLHelpers
 import GLImmediate
 import Trace
 
--- Simple 'frame buffer' interface where we can directly write into am ABGR8 vector and have
+-- Simple 'frame buffer' interface where we can directly write into an RGBA8 vector and have
 -- it appear on screen. Uses PBOs to allow writes to a texture drawn as a full screen quad
 
 data FrameBuffer = FrameBuffer { fbTex :: !GL.TextureObject
@@ -55,9 +55,8 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
     -- no need to check for this explicitly
     r <- control $ \run -> liftIO $ do
       let bindPBO = GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
-      bindPBO
-      allocPBO fb -- Prevent stalls by just allocating new PBO storage every time
-      GL.withMappedBuffer
+          -- Prevent stalls by just allocating new PBO storage every time
+       in bindPBO >> allocPBO fb >> GL.withMappedBuffer
             GL.PixelUnpackBuffer
             GL.WriteOnly
             ( \ptrPBO -> newForeignPtr_ ptrPBO >>= \fpPBO ->
