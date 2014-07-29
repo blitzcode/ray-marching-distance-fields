@@ -22,6 +22,7 @@ import Text.Printf
 import Data.Word
 import Data.List
 import Data.Complex
+import Data.Bits
 import qualified Data.Vector.Storable.Mutable as VSM
 import Foreign.Storable
 import Foreign.Ptr
@@ -162,7 +163,16 @@ draw = do
     fb <- view aeFB
 
     fillFrameBuffer fb $ \w h fb -> do
-        return ()
+        forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
+            let idx = px + py * w
+                x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
+                y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
+                c = x :+ y
+                i = go 0 (0 :+ 0)
+                go iter z | (iter > 49) || (realPart z * realPart z + imagPart z * imagPart z > 2*2) = iter
+                          | otherwise = go (iter + 1) $ z * z + c
+             in liftIO . VSM.write fb idx $ (truncate ((fromIntegral i) / 50 * 255 :: Float) :: Word32) `shiftL` 8
+             --in liftIO . VSM.write fb idx $ if i < 2 then 0x00FF0000 else 0x00007F00 -- ABGR
         {-
         forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
             let idx = px + py * w
@@ -170,7 +180,7 @@ draw = do
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
                 c = x :+ y
                 i = foldl' (\a _ -> a * a + c) (0 :+ 0) [1..100]
-             in liftIO . VSM.write fb idx $ if (realPart i) < 2 then 0x00FF0000 else 0x0000FF00 -- ABGR
+             in liftIO . VSM.write fb idx $ if (realPart i) < 2 then 0x00FF0000 else 0x00007F00 -- ABGR
         -}
 
     liftIO $ drawFrameBuffer fb
