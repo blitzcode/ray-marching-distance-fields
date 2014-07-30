@@ -100,6 +100,16 @@ processGLFWEvent ev =
         -}
         _ -> return ()
 
+{-# INLINE rasterMap #-}
+rasterMap :: (Monad m)
+          => Int -> Int -> (Int -> Int -> m ())
+          -> m ()
+rasterMap width height f = liner 0
+  where liner y | y >= height = return ()
+        liner y = columner 0
+          where columner x | x >= width = liner (y + 1)
+                columner x = f x y >> columner (x + 1)
+
 draw :: AppIO ()
 draw = do
     liftIO $ do
@@ -163,10 +173,22 @@ draw = do
 
     fb <- view aeFB
 
-    void $ fillFrameBuffer fb $ \w h fb -> do
+    void $ liftIO $ fillFrameBuffer fb $ \w h fb -> do
+        -- 9.6 10.3 FPS
         --forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
+
+        -- 2.7 10.7 FPS
         --numLoop 0 (h - 1) $ \py -> numLoop 0 (w - 1) $ \px ->
+
+        -- 9.6 11.0 FPS
         forLoop 0 (< h) (+1) $ \py -> forLoop 0 (< w) (+1) $ \px ->
+
+        -- 10.7 10.8 FPS
+        --forM_ [0..h - 1] $ \py -> forM_ [0..w - 1] $ \px ->
+
+        -- 9.4 10.3 FPS
+        -- https://github.com/Twinside/Juicy.Pixels/blob/395f9cd18ac936f769fc63781f67c076637cf7aa/src/Codec/Picture/Jpg/Common.hs#L179
+        --rasterMap w h $ \px py ->
             let idx = px + py * w
                 x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
@@ -176,7 +198,7 @@ draw = do
                 go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 2*2) = iter
                           | otherwise = let newZ = z * z + c
                                          in if newZ == z then maxIter else go (iter + 1) newZ
-             in liftIO . VSM.unsafeWrite fb idx $ (truncate ((fromIntegral i) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
+             in VSM.unsafeWrite fb idx $ (truncate ((fromIntegral i) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
         {-
         forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
             let idx = px + py * w
