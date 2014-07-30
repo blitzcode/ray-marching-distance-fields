@@ -193,12 +193,19 @@ draw = do
                 x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
                 c = x :+ y
-                maxIter = 50
-                i = go (0 :: Int) (0 :+ 0)
-                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 2*2) = iter
+                maxIter = 30
+                (icnt, escC) = go (0 :: Int) (0 :+ 0)
+                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 4*4) = (iter, z)
                           | otherwise = let newZ = z * z + c
-                                         in if newZ == z then maxIter else go (iter + 1) newZ
-             in VSM.unsafeWrite fb idx $ (truncate ((fromIntegral i) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
+                                         in if newZ == z then (maxIter, z) else go (iter + 1) newZ
+                icntCont = if icnt == maxIter then fromIntegral maxIter else fromIntegral icnt - (log(log(magnitude escC))) / log(2)
+             --in VSM.unsafeWrite fb idx $ (truncate ((fromIntegral icnt) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
+             in VSM.unsafeWrite fb idx $ (truncate (icntCont / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
+
+{-
+       float modulus = sqrt (ReZ*ReZ + ImZ*ImZ);
+      float mu = iter_count - (log (log (modulus)))/ log (2.0);
+-}
         {-
         forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
             let idx = px + py * w

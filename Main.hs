@@ -44,8 +44,8 @@ main = do
     runOnAllCores
     withTrace Nothing True False True TLInfo $ do
       _aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
-      let w = 640
-          h = truncate $ (640 * 0.8 :: Float)
+      let w = 800
+          h = truncate $ (fromIntegral w * 0.8 :: Float)
        in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
         traceSystemInfo
         withFontTexture $ \_aeFontTexture ->
