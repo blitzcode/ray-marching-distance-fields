@@ -173,6 +173,14 @@ draw = do
 
     fb <- view aeFB
 
+    tick <- realToFrac <$> use asCurTick
+    let scaledTick = snd . properFraction $ tick / 17
+        scaledTick2 = snd . properFraction $ tick / 61
+        scaledTick3 = snd . properFraction $ tick / 71
+        twoPi  = scaledTick * 2 * pi
+        juliaR = sin twoPi * max 0.7 scaledTick2
+        juliaI = cos twoPi * max 0.7 scaledTick3
+
     void $ liftIO $ fillFrameBuffer fb $ \w h fb -> do
         -- 9.6 10.3 FPS
         --forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
@@ -190,19 +198,27 @@ draw = do
         -- https://github.com/Twinside/Juicy.Pixels/blob/395f9cd18ac936f769fc63781f67c076637cf7aa/src/Codec/Picture/Jpg/Common.hs#L179
         --rasterMap w h $ \px py ->
             let idx = px + py * w
+                {-
                 x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
+                -}
+                x = ((fromIntegral px / fromIntegral w)) * 3 - 1.5 :: Float
+                y = ((fromIntegral py / fromIntegral h)) * 3 - 1.5 :: Float
                 c = x :+ y
-                maxIter = 30
-                (icnt, escC) = go (0 :: Int) (0 :+ 0)
-                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 4*4) = (iter, z)
-                          | otherwise = let newZ = z * z + c
+                maxIter = 50
+                (icnt, escC) = go (0 :: Int) {-(0 :+ 0)-} c
+                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 8*8) = (iter, z)
+                          | otherwise = let newZ = z * z + {-c-} (juliaR :+ juliaI)
                                          in if newZ == z then (maxIter, z) else go (iter + 1) newZ
                 icntCont = if icnt == maxIter then fromIntegral maxIter else fromIntegral icnt - (log(log(magnitude escC))) / log(2)
              --in VSM.unsafeWrite fb idx $ (truncate ((fromIntegral icnt) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
              in VSM.unsafeWrite fb idx $ (truncate (icntCont / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
 
 {-
+ -- http://linas.org/art-gallery/escape/escape.html
+ -- http://www.relativitybook.com/CoolStuff/julia_set.html
+ -- http://en.wikipedia.org/wiki/Mandelbrot_set#Computer_drawings
+ -- http://en.wikipedia.org/wiki/Mandelbrot_set#Continuous_.28smooth.29_coloring
        float modulus = sqrt (ReZ*ReZ + ImZ*ImZ);
       float mu = iter_count - (log (log (modulus)))/ log (2.0);
 -}
@@ -238,7 +254,7 @@ updateAndDrawFrameTimes = do
             (1.0 / fdWorst)
             (1.0 / fdBest )
     fontTex <- view aeFontTexture
-    liftIO $ drawText fontTex 4 0 0x00000000 stats
+    liftIO $ drawText fontTex 4 0 0x007F7F7F stats
     liftIO $ drawText fontTex 3 1 0x00FFFFFF stats
 
 run :: AppIO ()
