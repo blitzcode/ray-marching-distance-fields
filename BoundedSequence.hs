@@ -5,6 +5,7 @@ module BoundedSequence ( BoundedSequence
                        , push_
                        , pop
                        , toList
+                       , clear
                        ) where
 
 import qualified Data.Sequence as S
@@ -40,4 +41,7 @@ pop bs@(BoundedSequence s limit) =
 
 toList :: BoundedSequence a -> [a]
 toList (BoundedSequence s _) = Data.Foldable.toList s
+
+clear :: BoundedSequence a -> BoundedSequence a
+clear (BoundedSequence _ limit) = BoundedSequence S.empty limit
 
