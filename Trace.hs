@@ -28,12 +28,13 @@ import Data.List
 import Data.Monoid
 import Text.Printf
 
-data TraceLevel = TLNone | TLError | TLWarn | TLInfo deriving (Eq, Enum)
+data TraceLevel = TLNone | TLError | TLWarn | TLInfo
+                  deriving (Eq, Enum)
 
-data TraceSettings = TraceSettings { tsFile :: Maybe Handle
-                                   , tsEchoOn :: Bool
+data TraceSettings = TraceSettings { tsFile    :: Maybe Handle
+                                   , tsEchoOn  :: Bool
                                    , tsColorOn :: Bool
-                                   , tsLevel :: TraceLevel
+                                   , tsLevel   :: TraceLevel
                                    }
 
 -- The well-known unsafePerformIO hack. It would be a bit cumbersome to always pass the trace
@@ -45,8 +46,8 @@ traceSettings = unsafePerformIO newEmptyMVar
 withTrace :: Maybe FilePath -> Bool -> Bool -> Bool -> TraceLevel -> IO () -> IO ()
 withTrace traceFn echoOn appendOn colorOn level f =
     bracket
-        ( do h <- case traceFn of Just fn -> if level /= TLNone
-                                             then Just <$> openFile fn (if appendOn
+        ( do h <- case traceFn of Just fn -> if   level /= TLNone
+                                             then Just <$> openFile fn (if   appendOn
                                                                         then AppendMode
                                                                         else WriteMode)
                                              else return Nothing
@@ -63,38 +64,37 @@ withTrace traceFn echoOn appendOn colorOn level f =
         ( \ts -> do traceT TLInfo "Shutting down trace system"
                     void . takeMVar $ traceSettings
                     case tsFile ts of Just h -> hClose h
-                                      _ -> return ()
+                                      _      -> return ()
                     when (tsEchoOn ts) $ hFlush stdout
         )
         $ \_ -> f
 
 trace :: TraceLevel -> T.Text -> IO ()
 trace lvl msg = void $ withMVar traceSettings $ \ts -> -- TODO: Have to take an MVar even if
-                                                       -- tracing is off, speed this up
+                                                       --       tracing is off, speed this up
    when (lvl /= TLNone && fromEnum lvl <= fromEnum (tsLevel ts)) $ do
-       tid <- printf "%-12s" . show <$> myThreadId
+       tid  <- printf "%-12s" . show <$> myThreadId
        time <- printf "%-26s" . show . zonedTimeToLocalTime <$> getZonedTime
        let lvlDesc color = (if color then concat else (!! 1)) $ case lvl of
-               TLError -> [ mkANSICol A.Red , "ERROR", reset ]
-               TLWarn -> [ mkANSICol A.Yellow, "WARN ", reset ]
-               TLInfo -> [ mkANSICol A.White , "INFO ", reset ]
-               _ -> replicate 3 ""
+               TLError -> [ mkANSICol A.Red   , "ERROR", reset ]
+               TLWarn  -> [ mkANSICol A.Yellow, "WARN ", reset ]
+               TLInfo  -> [ mkANSICol A.White , "INFO ", reset ]
+               _       -> replicate 3 ""
            reset = A.setSGRCode []
            mkANSICol c = A.setSGRCode [ A.SetColor A.Foreground A.Vivid c ]
            header color = intercalate " | " [ lvlDesc color, tid, time ]
-           handles = case tsFile ts of Just h -> [h]; _ -> []; ++
-                           [stdout | tsEchoOn ts]
+           handles = case tsFile ts of Just h -> [h]; _ -> []; ++ [stdout | tsEchoOn ts]
            oneLine = not (T.any (== '\n') msg) && T.length msg < 80
        forM_ handles $ \h -> do
            closed <- hIsClosed h
-           hs <- hShow h
+           hs     <- hShow h
            -- Use ANSI colors when outputting to the terminal
            color <- (&&) (tsColorOn ts) <$> hIsTerminalDevice h
-           if closed
+           if   closed
            then TI.putStrLn $ "ERROR: Trace message lost, called trace after shutdown: " <> msg
                               <> "\n" <> T.pack hs <> "\n" <> T.pack (show h)
            else -- Display short, unbroken messages in a single line without padding newline
-                if oneLine
+                if   oneLine
                 then TI.hPutStrLn h $ T.pack (header color) <> " - " <> msg
                 else do hPutStrLn h $ header color
                         TI.hPutStrLn h msg
