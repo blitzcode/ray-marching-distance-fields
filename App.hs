@@ -1,46 +1,40 @@
 
-{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell, BangPatterns #-}
+{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell, LambdaCase #-}
 
 module App ( AppState(..)
            , AppEnv(..)
+           , Mode(..)
            , AppT
            , runAppT
            , run
            ) where
 
 import Control.Lens
-import Control.Loop
-import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.STM
-import Control.Monad.Trans.Control
 import Control.Concurrent.STM.TQueue
 import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
-import Data.Word
-import Data.List
-import Data.Complex
-import Data.Bits
-import qualified Data.Vector.Storable.Mutable as VSM
-import Foreign.Storable
-import Foreign.Ptr
-import Foreign.ForeignPtr
 
 import GLFWHelpers
 import GLHelpers
-import GLImmediate
 import Timing
 import Trace
 import Font
 import FrameBuffer
+import Fractal2D
 import qualified BoundedSequence as BS
+
+data Mode = ModeJuliaAnim | ModeJuliaAnimSmooth | ModeMandelBrot | ModeMandelBrotSmooth
+            deriving (Enum, Eq, Bounded, Show)
 
 data AppState = AppState { _asCurTick      :: !Double
                          , _asLastEscPress :: !Double
                          , _asFrameTimes   :: BS.BoundedSequence Double
+                         , _asMode         :: !Mode
                          }
 
 data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
@@ -75,49 +69,66 @@ processGLFWEvent ev =
            liftIO $ do
                traceS TLError $ "GLFW Error " ++ show e ++ " " ++ show s
                GLFW.setWindowShouldClose window True
-        GLFWEventKey win k {- sc -} _ ks {- mk -} _ ->
-           when (ks == GLFW.KeyState'Pressed) $ do
-               when (k == GLFW.Key'Escape) $ do
-                   lastPress <- use asLastEscPress
-                   tick      <- use asCurTick
-                   -- Only close when ESC has been pressed twice quickly
-                   when (tick - lastPress < 0.5) .
-                       liftIO $ GLFW.setWindowShouldClose win True
-                   asLastEscPress .= tick
+        GLFWEventKey win k {- sc -} _ ks {- mk -} _ | ks == GLFW.KeyState'Pressed ->
+            case k of
+                GLFW.Key'Escape -> do
+                    lastPress <- use asLastEscPress
+                    tick      <- use asCurTick
+                    -- Only close when ESC has been pressed twice quickly
+                    when (tick - lastPress < 0.5) .
+                        liftIO $ GLFW.setWindowShouldClose win True
+                    asLastEscPress .= tick
+                -- Also clear frame time history on mode switch
+                GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
+                GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
+                _ -> return ()
         GLFWEventWindowSize {- win -} _ w h -> do
             -- TODO: Window resizing blocks event processing,
             -- see https://github.com/glfw/glfw/issues/1
             liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
         GLFWEventFramebufferSize {- win -} _ w h -> do
             liftIO $ setup2D w h
-        {-
-        GLFWEventMouseButton win bttn st mk -> do
-            return ()
-        GLFWEventCursorPos win x y -> do
-            return ()
-        GLFWEventScroll win x y -> do
-            return ()
-        -}
+        -- GLFWEventMouseButton win bttn st mk -> do
+        --     return ()
+        -- GLFWEventCursorPos win x y -> do
+        --     return ()
+        -- GLFWEventScroll win x y -> do
+        --     return ()
         _ -> return ()
 
-{-# INLINE rasterMap #-}
-rasterMap :: (Monad m)
-          => Int -> Int -> (Int -> Int -> m ())
-          -> m ()
-rasterMap width height f = liner 0
-  where liner y | y >= height = return ()
-        liner y = columner 0
-          where columner x | x >= width = liner (y + 1)
-                columner x = f x y >> columner (x + 1)
+-- Move through an enumeration, but wrap around when hitting the end
+wrapSucc, wrapPred :: (Enum a, Bounded a, Eq a) => a -> a
+wrapSucc a | a == maxBound = minBound
+           | otherwise = succ a
+wrapPred a | a == minBound = maxBound
+           | otherwise = pred a
 
 draw :: AppIO ()
 draw = do
+    AppEnv   { .. } <- ask
+    AppState { .. } <- get
+    -- Clear
     liftIO $ do
         GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
-
-    --(w, h) <- (liftIO . GLFW.getFramebufferSize) =<< view aeWindow
+    -- Draw fractal into our frame buffer texture
+    void . fillFrameBuffer _aeFB $ \w h fbVec ->
+        liftIO $ case _asMode of
+            ModeJuliaAnim        -> juliaAnimated w h fbVec False _asCurTick
+            ModeJuliaAnimSmooth  -> juliaAnimated w h fbVec True  _asCurTick
+            ModeMandelBrot       -> mandelbrot    w h fbVec False
+            ModeMandelBrotSmooth -> mandelbrot    w h fbVec True
+    -- Draw frame buffer contents
+    liftIO $ drawFrameBuffer _aeFB
+    -- FPS counter and mode display
+    updateAndDrawFrameTimes
+    (_, h) <- liftIO $ GLFW.getFramebufferSize _aeWindow
+    liftIO . drawTextWithShadow _aeFontTexture 3 (h - 12) $
+        printf "Mode %i of %i [-][=]: %s"
+               (fromEnum _asMode + 1 :: Int)
+               (fromEnum (maxBound :: Mode) + 1 :: Int)
+               (show _asMode)
 
     {-
     liftIO $ do
@@ -171,8 +182,8 @@ draw = do
         GL.deleteObjectName tex
         -}
 
-    fb <- view aeFB
 
+{-
     tick <- realToFrac <$> use asCurTick
     let scaledTick = snd . properFraction $ tick / 17
         scaledTick2 = snd . properFraction $ tick / 61
@@ -181,7 +192,7 @@ draw = do
         juliaR = sin twoPi * max 0.7 scaledTick2
         juliaI = cos twoPi * max 0.7 scaledTick3
 
-    void $ liftIO $ fillFrameBuffer fb $ \w h fb -> do
+    void $ liftIO $ fillFrameBuffer fb $ \w h fb -> do-}
         -- 9.6 10.3 FPS
         --forM_ [(x, y) | y <- [0..h - 1], x <- [0..w - 1]] $ \(px, py) ->
 
@@ -189,7 +200,7 @@ draw = do
         --numLoop 0 (h - 1) $ \py -> numLoop 0 (w - 1) $ \px ->
 
         -- 9.6 11.0 FPS
-        forLoop 0 (< h) (+1) $ \py -> forLoop 0 (< w) (+1) $ \px ->
+        --forLoop 0 (< h) (+1) $ \py -> forLoop 0 (< w) (+1) $ \px ->
 
         -- 10.7 10.8 FPS
         --forM_ [0..h - 1] $ \py -> forM_ [0..w - 1] $ \px ->
@@ -197,28 +208,25 @@ draw = do
         -- 9.4 10.3 FPS
         -- https://github.com/Twinside/Juicy.Pixels/blob/395f9cd18ac936f769fc63781f67c076637cf7aa/src/Codec/Picture/Jpg/Common.hs#L179
         --rasterMap w h $ \px py ->
-            let idx = px + py * w
+           -- let idx = px + py * w
                 {-
                 x = ((fromIntegral px / fromIntegral w)) * 2.5 - 2 :: Float
                 y = ((fromIntegral py / fromIntegral h)) * 2   - 1 :: Float
                 -}
-                x = ((fromIntegral px / fromIntegral w)) * 3 - 1.5 :: Float
-                y = ((fromIntegral py / fromIntegral h)) * 3 - 1.5 :: Float
+                {-
+                x = ((fromIntegral px / fromIntegral w)) * 2.9 - 1.45 :: Float
+                y = ((fromIntegral py / fromIntegral h)) * 2.9 - 1.45 :: Float
                 c = x :+ y
-                maxIter = 50
-                (icnt, escC) = go (0 :: Int) {-(0 :+ 0)-} c
-                go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 8*8) = (iter, z)
-                          | otherwise = let newZ = z * z + {-c-} (juliaR :+ juliaI)
-                                         in if newZ == z then (maxIter, z) else go (iter + 1) newZ
-                icntCont = if icnt == maxIter then fromIntegral maxIter else fromIntegral icnt - (log(log(magnitude escC))) / log(2)
+                maxIter = 50-}
+                --(icnt, escC) = go (0 :: Int) {-(0 :+ 0)-} c
+                --go iter z | (iter == maxIter) || (realPart z * realPart z + imagPart z * imagPart z > 8*8) = (iter, z)
+                  --        | otherwise = let newZ = z * z + {-c-} (juliaR :+ juliaI)
+                    --                     in if newZ == z then (maxIter, z) else go (iter + 1) newZ
+                --icntCont = if icnt == maxIter then fromIntegral maxIter else fromIntegral icnt - (log(log(magnitude escC))) / log(2)
              --in VSM.unsafeWrite fb idx $ (truncate ((fromIntegral icnt) / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
-             in VSM.unsafeWrite fb idx $ (truncate (icntCont / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
+             --in VSM.unsafeWrite fb idx $ (truncate (icntCont / fromIntegral maxIter * 255 :: Float) :: Word32) `shiftL` 8
 
 {-
- -- http://linas.org/art-gallery/escape/escape.html
- -- http://www.relativitybook.com/CoolStuff/julia_set.html
- -- http://en.wikipedia.org/wiki/Mandelbrot_set#Computer_drawings
- -- http://en.wikipedia.org/wiki/Mandelbrot_set#Continuous_.28smooth.29_coloring
        float modulus = sqrt (ReZ*ReZ + ImZ*ImZ);
       float mu = iter_count - (log (log (modulus)))/ log (2.0);
 -}
@@ -232,9 +240,6 @@ draw = do
              in liftIO . VSM.write fb idx $ if (realPart i) < 2 then 0x00FF0000 else 0x00007F00 -- ABGR
         -}
 
-    liftIO $ drawFrameBuffer fb
-
-    updateAndDrawFrameTimes
 
 updateAndDrawFrameTimes :: AppIO ()
 updateAndDrawFrameTimes = do
@@ -253,9 +258,12 @@ updateAndDrawFrameTimes = do
             (1.0 / fdMean ) (fdMean  * 1000)
             (1.0 / fdWorst)
             (1.0 / fdBest )
-    fontTex <- view aeFontTexture
-    liftIO $ drawText fontTex 4 0 0x007F7F7F stats
-    liftIO $ drawText fontTex 3 1 0x00FFFFFF stats
+    view aeFontTexture >>= \fontTex -> liftIO $ drawTextWithShadow fontTex 4 0 stats
+
+drawTextWithShadow :: GL.TextureObject -> Int -> Int -> String -> IO ()
+drawTextWithShadow tex x y str = do
+    drawText tex (x + 1) (y - 1) 0x007F7F7F str
+    drawText tex  x       y      0x0000FF00 str
 
 run :: AppIO ()
 run = do

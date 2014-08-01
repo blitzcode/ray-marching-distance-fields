@@ -44,15 +44,16 @@ main = do
     runOnAllCores
     withTrace Nothing True False True TLInfo $ do
       _aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
-      let w = 400
-          h = truncate $ (fromIntegral w * 0.8 :: Float)
+      let w = 512
+          h = 512
        in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
         traceSystemInfo
         withFontTexture $ \_aeFontTexture ->
           withFrameBuffer w h $ \_aeFB -> do
             _asCurTick <- getTick
             let as = AppState { _asLastEscPress = -1
-                              , _asFrameTimes = BS.empty 250 -- Average over last 250 FPS
+                              , _asFrameTimes   = BS.empty 250 -- Average over last N FPS
+                              , _asMode         = ModeJuliaAnimSmooth
                               , ..
                               }
                 ae = AppEnv { .. }
