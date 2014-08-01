@@ -3,13 +3,17 @@
 
 module Fractal2D ( mandelbrot
                  , juliaAnimated
+                 , makeSegments
                  ) where
 
 import Control.Loop
+import Control.Monad
+import Control.Concurrent.Async
 import Data.Complex
 import Data.Word
 import Data.Bits
 import qualified Data.Vector.Storable.Mutable as VSM
+import Control.Concurrent (getNumCapabilities)
 
 magnitudeSq :: RealFloat a => Complex a -> a
 magnitudeSq c = realPart c * realPart c + imagPart c * imagPart c
@@ -49,23 +53,33 @@ mandelbrot w h fb smooth =
           then toGreen $ truncate (icCont / fromIntegral maxIter * 255 :: Float)
           else toGreen $ truncate ((fromIntegral iCnt / fromIntegral maxIter) * 255 :: Float)
 
+-- Split an interval into evenly spaced segments
+makeSegments :: Int -> Int -> Int -> [(Int, Int)]
+makeSegments nseg low high =
+    map (\i -> (low + i * segl, low + (i + 1) * segl - 1)) [0..nseg - 2] ++ end
+  where range = high - low
+        segl  = (range `div` nseg)
+        end   = [(low + (nseg - 1) * segl, high - 1)]
+
 -- http://en.wikipedia.org/wiki/Julia_set
 -- http://www.relativitybook.com/CoolStuff/julia_set.html
 juliaAnimated :: Int -> Int -> VSM.IOVector Word32 -> Bool -> Double -> IO ()
-juliaAnimated w h fb smooth tick =
-  let !fTick       = realToFrac tick :: Float
-      !scaledTick  = snd (properFraction $ fTick / 17 :: (Int, Float))
-      !scaledTick2 = snd (properFraction $ fTick / 61 :: (Int, Float))
-      !scaledTick3 = snd (properFraction $ fTick / 71 :: (Int, Float))
-      !twoPi       = scaledTick * 2 * pi
-      !juliaR      = sin twoPi * max 0.7 scaledTick2
-      !juliaI      = cos twoPi * max 0.7 scaledTick3
-      !fw          = fromIntegral w  :: Float
-      !fh          = fromIntegral h  :: Float
-      !ratio       = fw / fh
-      !xshift      = 1.45 * ratio
-      !maxIter     = 40
-   in forLoop 0 (< h) (+ 1) $ \py -> forLoop 0 (< w) (+ 1) $ \px ->
+juliaAnimated w h fb smooth tick = do
+  nCPUs <- getNumCapabilities
+  let !fTick         = realToFrac tick :: Float
+      !scaledTick    = snd (properFraction $ fTick / 17 :: (Int, Float))
+      !scaledTick2   = snd (properFraction $ fTick / 61 :: (Int, Float))
+      !scaledTick3   = snd (properFraction $ fTick / 71 :: (Int, Float))
+      !twoPi         = scaledTick * 2 * pi
+      !juliaR        = sin twoPi * max 0.7 scaledTick2
+      !juliaI        = cos twoPi * max 0.7 scaledTick3
+      !fw            = fromIntegral w  :: Float
+      !fh            = fromIntegral h  :: Float
+      !ratio         = fw / fh
+      !xshift        = 1.45 * ratio
+      !maxIter       = 40
+      !segments      = makeSegments nCPUs 0 h
+      doSeg (lo, hi) = forLoop lo (<= hi) (+ 1) $ \py -> forLoop 0 (< w) (+ 1) $ \px ->
         let idx          = px + py * w
             fpx          = fromIntegral px :: Float
             fpy          = fromIntegral py :: Float
@@ -86,4 +100,5 @@ juliaAnimated w h fb smooth tick =
               if   smooth
               then toGreen $ truncate (icCont / fromIntegral maxIter * 255 :: Float)
               else toGreen $ truncate ((fromIntegral iCnt / fromIntegral maxIter) * 255 :: Float)
+   in void $ mapConcurrently doSeg segments
 
