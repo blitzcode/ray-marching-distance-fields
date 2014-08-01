@@ -3,7 +3,6 @@
 
 module Fractal2D ( mandelbrot
                  , juliaAnimated
-                 , makeSegments
                  ) where
 
 import Control.Loop
@@ -14,6 +13,8 @@ import Data.Word
 import Data.Bits
 import qualified Data.Vector.Storable.Mutable as VSM
 import Control.Concurrent (getNumCapabilities)
+
+-- A few simple 2D fractals, just for testing
 
 magnitudeSq :: RealFloat a => Complex a -> a
 magnitudeSq c = realPart c * realPart c + imagPart c * imagPart c
@@ -47,13 +48,17 @@ mandelbrot w h fb smooth =
                                     else go (iter + 1) newZ
         icCont | iCnt == maxIter = fromIntegral maxIter -- Interior in case of limit
                | otherwise       = fractionalIterCnt iCnt escZ
-        toGreen v = v `shiftL` 8
-     in VSM.unsafeWrite fb idx $
+        toGreen v = v `unsafeShiftL` 8
+     in VSM.unsafeWrite fb idx . toGreen . truncate $
           if   smooth
-          then toGreen $ truncate (icCont / fromIntegral maxIter * 255 :: Float)
-          else toGreen $ truncate ((fromIntegral iCnt / fromIntegral maxIter) * 255 :: Float)
+          then icCont            / fromIntegral maxIter * 255 :: Float
+          else fromIntegral iCnt / fromIntegral maxIter * 255 :: Float
 
 -- Split an interval into evenly spaced segments
+--
+-- TODO: This function behaves poorly when the interval is null / descending or there
+--       are more segments than steps, make this more robust
+--
 makeSegments :: Int -> Int -> Int -> [(Int, Int)]
 makeSegments nseg low high =
     map (\i -> (low + i * segl, low + (i + 1) * segl - 1)) [0..nseg - 2] ++ end
@@ -96,9 +101,9 @@ juliaAnimated w h fb smooth tick = do
             icCont | iCnt == maxIter = fromIntegral maxIter -- Interior in case of limit
                    | otherwise       = fractionalIterCnt iCnt escZ
             toGreen v = v `unsafeShiftL` 8
-         in VSM.unsafeWrite fb idx $
+         in VSM.unsafeWrite fb idx . toGreen . truncate $
               if   smooth
-              then toGreen $ truncate (icCont / fromIntegral maxIter * 255 :: Float)
-              else toGreen $ truncate ((fromIntegral iCnt / fromIntegral maxIter) * 255 :: Float)
+              then icCont            / fromIntegral maxIter * 255 :: Float
+              else fromIntegral iCnt / fromIntegral maxIter * 255 :: Float
    in void $ mapConcurrently doSeg segments
 
