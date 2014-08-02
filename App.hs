@@ -18,6 +18,7 @@ import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
+import Data.Time
 
 import GLFWHelpers
 import GLHelpers
@@ -80,6 +81,9 @@ processGLFWEvent ev =
                 -- Also clear frame time history on mode switch
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
+                GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFBToPNG fb .
+                                    map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
+                                      . printf "Screenshot-%s.png" =<< show <$> getZonedTime
                 _              -> return ()
         GLFWEventWindowSize {- win -} _ w h -> do
             -- TODO: Window resizing blocks event processing,
@@ -124,7 +128,7 @@ draw = do
     ftStr <- updateAndReturnFrameTimes
     (_, h) <- liftIO $ GLFW.getFramebufferSize _aeWindow
     liftIO . drawTextWithShadow _aeFontTexture 3 (h - 12) $
-        printf "Mode %i of %i [-][=]: %s\n%s"
+        printf "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n%s"
                (fromEnum _asMode + 1 :: Int)
                (fromEnum (maxBound :: Mode) + 1 :: Int)
                (show _asMode)

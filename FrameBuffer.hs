@@ -4,6 +4,7 @@
 module FrameBuffer ( withFrameBuffer
                    , fillFrameBuffer
                    , drawFrameBuffer
+                   , saveFBToPNG
                    , FrameBuffer
                    ) where
 
@@ -14,9 +15,11 @@ import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import Data.Word
 import qualified Data.Vector.Storable.Mutable as VSM
+import qualified Data.Vector.Storable as VS
 import Foreign.Storable
 import Foreign.Ptr
 import Foreign.ForeignPtr
+import qualified Codec.Picture as JP
 
 import GLHelpers
 import GLImmediate
@@ -119,4 +122,20 @@ allocPBO FrameBuffer { .. } =
                                              , nullPtr            -- Just allocate
                                              , GL.StreamDraw      -- Dynamic
                                              )
+
+saveFBToPNG :: FrameBuffer -> FilePath -> IO ()
+saveFBToPNG FrameBuffer { .. } fn = do
+    GL.textureBinding GL.Texture2D GL.$= Just fbTex
+    img <- VSM.new $ fbWdh * fbHgt * sizeOf(0 :: Word32) :: IO (VSM.IOVector JP.Pixel8)
+    (tw, th) <- getCurTex2DSize
+    (tw == fbWdh && th == fbHgt) `assert` VSM.unsafeWith img $
+        GL.getTexImage GL.Texture2D 0 . GL.PixelData GL.RGBA GL.UnsignedByte
+    GL.textureBinding GL.Texture2D GL.$= Nothing
+    let flipAndFixA img' =
+          JP.generateImage
+            ( \x y -> case JP.pixelAt img' x (fbHgt - 1 - y) of
+                          JP.PixelRGBA8 r g b _ -> JP.PixelRGBA8 r g b 0xFF
+            ) fbWdh fbHgt
+     in JP.savePngImage fn . JP.ImageRGBA8 . flipAndFixA . JP.Image fbWdh fbHgt =<< VS.freeze img
+    traceS TLInfo $ "Saved screenshot of framebuffer to " ++ fn
 

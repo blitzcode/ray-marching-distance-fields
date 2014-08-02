@@ -20,12 +20,14 @@ executable mandelbulb
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.7 && <4.8,
-                       mtl,
+                       -- Want ExceptT and modify'
+                       mtl >= 2.2.1,
                        transformers,
                        monad-control,
                        linear,
                        GLFW-b,
-                       OpenGL,
+                       OpenGL >= 2.9.2.0,
+                       OpenGLRaw,
                        loop,
                        stm,
                        vector,
@@ -35,7 +37,8 @@ executable mandelbulb
                        text,
                        bytestring,
                        containers,
-                       async
+                       async,
+                       JuicyPixels >= 3.1.5.2
   -- hs-source-dirs:
   default-language:    Haskell2010
   -- -ddump-simpl -ddump-to-file

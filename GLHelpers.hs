@@ -5,6 +5,7 @@ module GLHelpers ( setup2D
                  , getGLStrings
                  , traceOnGLError
                  , throwOnGLError
+                 , getCurTex2DSize
                  ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
@@ -50,4 +51,8 @@ getGLStrings =
     <*> (length <$> GL.get GL.glExtensions)
     <*> (fromJust <$> GLFW.getVersionString)
     -- <*> (show <$> GL.get GL.glExtensions)
+    --
+getCurTex2DSize :: IO (Int, Int)
+getCurTex2DSize = (\(GL.TextureSize2D w h) -> (fromIntegral w, fromIntegral h))
+                         <$> (GL.get $ GL.textureSize2D GL.Texture2D 0)
 
