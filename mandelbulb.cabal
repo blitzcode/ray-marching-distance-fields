@@ -38,7 +38,8 @@ executable mandelbulb
                        bytestring,
                        containers,
                        async,
-                       JuicyPixels >= 3.1.5.2
+                       JuicyPixels >= 3.1.5.2,
+                       deepseq
   -- hs-source-dirs:
   default-language:    Haskell2010
   -- -ddump-simpl -ddump-to-file

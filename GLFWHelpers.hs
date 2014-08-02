@@ -18,12 +18,12 @@ withWindow w h title tq =
              -- GLFW.windowHint $ GLFW.WindowHint'Samples 4
              -- GLFW.windowHint $ GLFW.WindowHint'Decorated False
              GLFW.windowHint $ GLFW.WindowHint'Resizable False
-             -- >2.1, no backwards compatibility
-             --
-             -- GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
-             -- GLFW.windowHint $ GLFW.WindowHint'OpenGLForwardCompat True
-             -- GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
-             -- GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 2
+             -- >2.1, no backwards compatibility on OS X
+             -- http://www.glfw.org/faq.html#how-do-i-create-an-opengl-30-context
+             GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
+             GLFW.windowHint $ GLFW.WindowHint'OpenGLForwardCompat True
+             GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
+             GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 2
              Just window <- GLFW.createWindow w h title Nothing Nothing
              registerCallbacks window tq
              GLFW.makeContextCurrent $ Just window

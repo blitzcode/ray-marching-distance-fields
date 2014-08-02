@@ -7,7 +7,7 @@ module Shaders ( vsSrcBasic
                , mkShaderProgam
                , setAttribArray
                , setTextureShader
-               , setProjMatrixFromFFP
+               , setOrtho2DProjMatrix
                ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
@@ -88,46 +88,54 @@ setTextureShader tex tu prog uname = do
     GL.activeTexture               GL.$= GL.TextureUnit (fromIntegral tu)
     GL.textureBinding GL.Texture2D GL.$= Just tex
 
--- Hack to set a shader's uniform matrix from the FFP projection matrix
-setProjMatrixFromFFP :: GL.Program -> String -> IO ()
-setProjMatrixFromFFP prog uniform = do
+setOrtho2DProjMatrix :: GL.Program -> String -> Int -> Int -> IO ()
+setOrtho2DProjMatrix prog uniform w h = do
     GL.UniformLocation loc <- GL.get $ GL.uniformLocation prog uniform
-    withArray ([1..16] :: [GL.GLfloat]) $ \ptr -> do GLR.glGetFloatv GLR.gl_PROJECTION_MATRIX ptr
-                                                     GLR.glUniformMatrix4fv loc 1 0 ptr
+    let ortho2D = [ 2 / fromIntegral w, 0, 0, -1,
+                    0, 2 / fromIntegral h, 0, -1,
+                    0, 0, (-2) / 1000, -1, 
+                    0, 0, 0, 1
+                  ] :: [GL.GLfloat]
+    withArray ortho2D $ \ptr -> GLR.glUniformMatrix4fv loc 1 1 ptr
 
 -- Shader source for basic vertex and fragment shaders
 vsSrcBasic, fsSrcBasic, fsColOnlySrcBasic :: B.ByteString
 vsSrcBasic = TE.encodeUtf8 $ T.unlines
-    [ "#version 120"
+    [ "#version 330 core"
     , "uniform mat4 in_mvp;"
-    , "attribute vec3 in_pos;"
-    , "attribute vec4 in_col;"
-    , "attribute vec2 in_uv;"
-    , "varying vec4 fs_col;"
-    , "varying vec2 fs_uv;"
+    , "layout(location = 0) in vec3 in_pos;"
+    , "layout(location = 1) in vec4 in_col;"
+    , "layout(location = 2) in vec2 in_uv;"
+    , "out vec4 fs_col;"
+    , "out vec2 fs_uv;"
     , "void main()"
     , "{"
+    --, "    gl_Position = vec4((in_pos.x / 512.0) * 2.0 - 1.0, (in_pos.y / 512.0) * 2.0 - 1.0, 0, 1);"
     , "    gl_Position = in_mvp * vec4(in_pos, 1.0);"
+    --, "    gl_Position.z = 0;"
+    --, "    gl_Position.w = 1;"
     , "    fs_col      = in_col;"
     , "    fs_uv       = in_uv;"
     , "}"
     ]
 fsSrcBasic = TE.encodeUtf8 $ T.unlines
-    [ "#version 120"
-    , "varying vec4 fs_col;"
-    , "varying vec2 fs_uv;"
+    [ "#version 150 core"
+    , "in vec4 fs_col;"
+    , "in vec2 fs_uv;"
     , "uniform sampler2D tex;"
+    , "out vec4 frag_color;"
     , "void main()"
     , "{"
-    , "   gl_FragColor = fs_col * texture2D(tex, fs_uv);"
+    , "   frag_color = fs_col * texture(tex, fs_uv);"
     , "}"
     ]
 fsColOnlySrcBasic = TE.encodeUtf8 $ T.unlines
-    [ "#version 120"
-    , "varying vec4 fs_col;"
+    [ "#version 150 core"
+    , "in vec4 fs_col;"
+    , "out vec4 frag_color;"
     , "void main()"
     , "{"
-    , "   gl_FragColor = fs_col;"
+    , "   frag_color = fs_col;"
     , "}"
     ]
 

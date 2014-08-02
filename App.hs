@@ -27,6 +27,7 @@ import Trace
 import Font
 import FrameBuffer
 import Fractal2D
+import QuadRendering
 import qualified BoundedSequence as BS
 
 data Mode = ModeJuliaAnim | ModeJuliaAnimSmooth | ModeMandelBrot | ModeMandelBrotSmooth
@@ -42,6 +43,7 @@ data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
                      , _aeGLFWEventsQueue :: TQueue GLFWEvent
                      , _aeFontTexture     :: GL.TextureObject
                      , _aeFB              :: FrameBuffer
+                     , _aeQR              :: QuadRenderer
                      }
 
 makeLenses ''AppState
@@ -89,8 +91,8 @@ processGLFWEvent ev =
             -- TODO: Window resizing blocks event processing,
             -- see https://github.com/glfw/glfw/issues/1
             liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
-        GLFWEventFramebufferSize {- win -} _ w h -> do
-            liftIO $ setup2D w h
+        GLFWEventFramebufferSize {- win -} _ w h ->
+            liftIO $ setupViewport w h
         -- GLFWEventMouseButton win bttn st mk -> do
         --     return ()
         -- GLFWEventCursorPos win x y -> do
@@ -122,17 +124,19 @@ draw = do
             ModeJuliaAnimSmooth  -> juliaAnimated w h fbVec True  _asCurTick
             ModeMandelBrot       -> mandelbrot    w h fbVec False
             ModeMandelBrotSmooth -> mandelbrot    w h fbVec True
-    -- Draw frame buffer contents
-    liftIO $ drawFrameBuffer _aeFB
-    -- FPS counter and mode display
-    ftStr <- updateAndReturnFrameTimes
-    (_, h) <- liftIO $ GLFW.getFramebufferSize _aeWindow
-    liftIO . drawTextWithShadow _aeFontTexture 3 (h - 12) $
-        printf "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n%s"
-               (fromEnum _asMode + 1 :: Int)
-               (fromEnum (maxBound :: Mode) + 1 :: Int)
-               (show _asMode)
-               ftStr
+    -- Render everything quad based
+    (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
+        void . withQuadRenderBuffer _aeQR w h $ \qb -> do
+            -- Draw frame buffer contents
+            liftIO $ drawFrameBuffer _aeFB qb
+            -- FPS counter and mode display
+            ftStr <- updateAndReturnFrameTimes
+            liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
+                printf "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n%s"
+                       (fromEnum _asMode + 1 :: Int)
+                       (fromEnum (maxBound :: Mode) + 1 :: Int)
+                       (show _asMode)
+                       ftStr
 
 updateAndReturnFrameTimes :: MonadState AppState m => m String
 updateAndReturnFrameTimes = do
@@ -150,19 +154,19 @@ updateAndReturnFrameTimes = do
                         (1.0 / fdWorst)
                         (1.0 / fdBest )
 
-drawTextWithShadow :: GL.TextureObject -> Int -> Int -> String -> IO ()
-drawTextWithShadow tex x y str = do
-    drawText tex (x + 1) (y - 1) 0x007F7F7F str
-    drawText tex  x       y      0x0000FF00 str
+drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
+drawTextWithShadow tex qb x y str = do
+    drawText tex qb (x + 1) (y - 1) 0x007F7F7F str
+    drawText tex qb  x       y      0x0000FF00 str
 
 run :: AppIO ()
 run = do
     -- Setup OpenGL / GLFW
     window <- view aeWindow
     liftIO $ do
-        (w, h) <- GLFW.getFramebufferSize window
+        (w, h) <- liftIO $ GLFW.getFramebufferSize window
+        setupViewport w h
         GLFW.swapInterval 0
-        setup2D w h
     -- Main loop
     let loop = do
           time <- liftIO $ getTick

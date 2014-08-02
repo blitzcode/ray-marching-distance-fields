@@ -22,7 +22,7 @@ import Foreign.ForeignPtr
 import qualified Codec.Picture as JP
 
 import GLHelpers
-import GLImmediate
+import QuadRendering
 import Trace
 
 -- Simple 'frame buffer' interface where we can directly write into an RGBA8 vector and have
@@ -39,6 +39,8 @@ withFrameBuffer fbWdh fbHgt f = do
   traceOnGLError $ Just "withFrameBuffer begin"
   r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbPBO -> do
+           GL.textureBinding GL.Texture2D GL.$= Just fbTex
+           setTextureFiltering TFNone
            GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
            let fb = FrameBuffer { .. }
            allocPBO fb
@@ -77,8 +79,8 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
             )
     liftIO $ do
       -- Update frame buffer texture from the PBO data
-      GL.texture        GL.Texture2D GL.$= GL.Enabled
       GL.textureBinding GL.Texture2D GL.$= Just fbTex
+      -- TODO: Could use immutable textures through glTexStorage + glTexSubImage
       liftIO $ GL.texImage2D GL.Texture2D
                              GL.NoProxy
                              0
@@ -89,28 +91,20 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
       -- Done
       GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
       GL.textureBinding GL.Texture2D GL.$= Nothing
-      GL.texture        GL.Texture2D GL.$= GL.Disabled
     return r
 
-drawFrameBuffer :: FrameBuffer -> IO ()
-drawFrameBuffer FrameBuffer { .. } = do
-    -- Setup texture
-    GL.texture        GL.Texture2D GL.$= GL.Enabled
-    GL.textureBinding GL.Texture2D GL.$= Just fbTex
-    GL.textureFilter  GL.Texture2D GL.$= ((GL.Nearest, Nothing), GL.Nearest)
+drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> IO ()
+drawFrameBuffer FrameBuffer { .. } qb =
     -- Draw full screen quad 
-    GL.renderPrimitive GL.Quads $ do
-        texCoord2f 0 0
-        vertex3f   0 0 (-1)
-        texCoord2f 1 0
-        vertex3f   (fromIntegral fbWdh) 0 (-1)
-        texCoord2f 1 1
-        vertex3f   (fromIntegral fbWdh) (fromIntegral fbHgt) (-1)
-        texCoord2f 0 1
-        vertex3f   0 (fromIntegral fbHgt) (-1)
-    -- Done
-    GL.textureBinding GL.Texture2D GL.$= Nothing
-    GL.texture GL.Texture2D        GL.$= GL.Disabled
+    drawQuad qb
+             0 0 (fromIntegral fbWdh) (fromIntegral fbHgt)
+             10
+             FCWhite
+             --(FCLeftRightGradient (RGBA 0 0 0 1) (RGBA 1 1 1 1))
+             TRNone
+             (Just fbTex)
+             --Nothing
+             QuadUVDefault
 
 fbSize :: Integral a => Int -> Int -> a
 fbSize w h = fromIntegral $ w * h * sizeOf (0 :: Word32)

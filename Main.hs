@@ -17,6 +17,7 @@ import GLHelpers
 import Timing
 import Font
 import FrameBuffer
+import QuadRendering
 import qualified BoundedSequence as BS
 
 runOnAllCores :: IO ()
@@ -37,7 +38,7 @@ traceSystemInfo = do
                       ]
              ]
         )
-        <$> getGLStrings
+        <$> (("\n" ++) <$> getGLStrings)
 
 main :: IO ()
 main = do
@@ -49,13 +50,14 @@ main = do
        in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
         traceSystemInfo
         withFontTexture $ \_aeFontTexture ->
-          withFrameBuffer w h $ \_aeFB -> do
-            _asCurTick <- getTick
-            let as = AppState { _asLastEscPress = -1
-                              , _asFrameTimes   = BS.empty 250 -- Average over last N FPS
-                              , _asMode         = ModeJuliaAnimSmooth
-                              , ..
-                              }
-                ae = AppEnv { .. }
-             in runAppT as ae run
+          withFrameBuffer w h $ \_aeFB ->
+            withQuadRenderer 1024 $ \_aeQR -> do
+              _asCurTick <- getTick
+              let as = AppState { _asLastEscPress = -1
+                                , _asFrameTimes   = BS.empty 120 -- Average over last N FPS
+                                , _asMode         = ModeJuliaAnimSmooth
+                                , ..
+                                }
+                  ae = AppEnv { .. }
+               in runAppT as ae run
 

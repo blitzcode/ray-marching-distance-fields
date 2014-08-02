@@ -11,13 +11,19 @@ import qualified Graphics.Rendering.OpenGL.GLU as GLU (build2DMipmaps)
 import Control.Exception
 import Control.Monad
 
+import GLHelpers
+import QuadRendering
+
 withFontTexture :: (GL.TextureObject -> IO a) -> IO a
-withFontTexture f =
-  bracket
+withFontTexture f = do
+  traceOnGLError $ Just "withFontTexture begin"
+  r <- bracket
     GL.genObjectName
     GL.deleteObjectName
     $ \tex -> do
+      -- Font texture
       GL.textureBinding GL.Texture2D GL.$= Just tex
+      setTextureFiltering TFMinOnly
       -- Convert font grid bitmap image from Word32 list into byte array
       let fontImgArray = VU.fromListN (16 * 16 * 6 * 12 `div` 8) .
                          concatMap (\x -> map (extractByte x) [0..3]) $ miscFixed6x12Data
@@ -35,15 +41,13 @@ withFontTexture f =
                              (fromIntegral fontTexWdh)
                              (fromIntegral fontTexWdh)
                              (GL.PixelData GL.RGBA GL.UnsignedByte ptr)
+      traceOnGLError $ Just "withFontTexture begin inner"
       f tex
+  traceOnGLError $ Just "withFontTexture after cleanup"
+  return r
 
-drawText :: GL.TextureObject -> Int -> Int -> Word32 -> String -> IO ()
-drawText tex x y color str = do
-    GL.texture        GL.Texture2D GL.$= GL.Enabled
-    GL.textureBinding GL.Texture2D GL.$= Just tex
-    GL.textureFilter  GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Nearest)
-    GL.blend     GL.$= GL.Enabled
-    GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+drawText :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> Word32 -> String -> IO ()
+drawText tex qb x y color str = do
     let charAndPos = filter (\(_, _, c) -> c /= '\n') .
                          scanl (\(x', y', _) a -> if   a == '\n'
                                                   then ((-1)  , y' - 1, a)
@@ -59,37 +63,17 @@ drawText tex x y color str = do
             fty            = fromIntegral (ty * fontCharHgt) / fromIntegral fontTexWdh;
             fontCharWdhTex = fromIntegral fontCharWdh / fromIntegral fontTexWdh
             fontCharHgtTex = fromIntegral fontCharHgt / fromIntegral fontTexWdh
-         in GL.renderPrimitive GL.Quads $ do
-                let channel i = fromIntegral (extractByte color i) / 255.0
-                GL.color (GL.Color3 (channel 0) (channel 1) (channel 2) :: GL.Color3 GL.GLfloat)
-                GL.texCoord ((GL.TexCoord2
-                    (ftx)
-                    (fty)) :: GL.TexCoord2 GL.GLfloat)
-                GL.vertex ((GL.Vertex2(
-                    (fromIntegral $ x + xoffs))
-                    (fromIntegral $ y + yoffs)) :: GL.Vertex2 GL.GLfloat)
-                GL.texCoord ((GL.TexCoord2
-                    (ftx + fontCharWdhTex)
-                    (fty )) :: GL.TexCoord2 GL.GLfloat)
-                GL.vertex ((GL.Vertex2(
-                    (fromIntegral $ x + xoffs + fontCharWdh))
-                    (fromIntegral $ y + yoffs )) :: GL.Vertex2 GL.GLfloat)
-                GL.texCoord ((GL.TexCoord2
-                    (ftx + fontCharWdhTex)
-                    (fty + fontCharHgtTex)) :: GL.TexCoord2 GL.GLfloat)
-                GL.vertex ((GL.Vertex2(
-                    (fromIntegral $ x + xoffs + fontCharWdh))
-                    (fromIntegral $ y + yoffs + fontCharHgt)) :: GL.Vertex2 GL.GLfloat)
-                GL.texCoord ((GL.TexCoord2
-                    (ftx )
-                    (fty + fontCharHgtTex)) :: GL.TexCoord2 GL.GLfloat)
-                GL.vertex ((GL.Vertex2(
-                    (fromIntegral $ x + xoffs ))
-                    (fromIntegral $ y + yoffs + fontCharHgt)) :: GL.Vertex2 GL.GLfloat)
-    GL.color (GL.Color3 1 1 1 :: GL.Color3 GL.GLfloat)
-    GL.blend GL.$= GL.Disabled
-    GL.textureBinding GL.Texture2D GL.$= Nothing
-    GL.texture GL.Texture2D GL.$= GL.Disabled
+            channel i      = fromIntegral (extractByte color i) / 255.0
+         in drawQuad qb
+                     (fromIntegral $ x + xoffs)
+                     (fromIntegral $ y + yoffs)
+                     (fromIntegral $ x + xoffs + fontCharWdh)
+                     (fromIntegral $ y + yoffs + fontCharHgt)
+                     1
+                     (FCSolid $ RGBA (channel 0) (channel 1) (channel 2) 1)
+                     TRSrcAlpha
+                     (Just tex)
+                     $ QuadUV ftx fty (ftx + fontCharWdhTex) (fty + fontCharHgtTex)
 
 extractByte :: Word32 -> Int -> Word8
 extractByte x i = fromIntegral $ (x .&. (0xFF `shiftL` (i * 8))) `shiftR` (i * 8)
@@ -98,11 +82,11 @@ extractByte x i = fromIntegral $ (x .&. (0xFF `shiftL` (i * 8))) `shiftR` (i * 8
 fontGridWdh, fontGridHgt, fontImgWdh, fontImgHgt, fontCharWdh, fontCharHgt, fontTexWdh :: Int
 fontGridWdh = 16
 fontGridHgt = 16
-fontImgWdh = 96
-fontImgHgt = 192
+fontImgWdh  = 96
+fontImgHgt  = 192
 fontCharWdh = 6
 fontCharHgt = 12
-fontTexWdh = 256
+fontTexWdh  = 256
 miscFixed6x12Data :: [Word32]
 miscFixed6x12Data =
     [ 0x00000000, 0x00000000, 0x20080200, 0x00000000, 0x00000000, 0x10080100, 0x711c2772, 0xc7f100c7
