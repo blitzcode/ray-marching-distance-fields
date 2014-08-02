@@ -27,8 +27,11 @@ import GLHelpers
 
 -- GLSL shaders and support functions
 
-mkShaderProgam :: B.ByteString -> B.ByteString -> IO (Either String GL.Program)
-mkShaderProgam vsSrc fsSrc =
+mkShaderProgam :: B.ByteString
+               -> B.ByteString
+               -> [(String, GL.AttribLocation)]
+               -> IO (Either String GL.Program)
+mkShaderProgam vsSrc fsSrc attribLocations =
     -- Always delete the shaders (don't need them after linking), only delete the program
     -- on error
     bracket        (GL.createShader GL.VertexShader  ) (GL.deleteObjectName) $ \shdVtx  ->
@@ -38,6 +41,9 @@ mkShaderProgam vsSrc fsSrc =
                  compile shdVtx  vsSrc
                  compile shdFrag fsSrc
                  liftIO $ GL.attachShader shdProg shdVtx >> GL.attachShader shdProg shdFrag
+                 -- Need to specify attribute locations before we link
+                 liftIO . forM_ attribLocations $
+                     \(name, loc) -> GL.attribLocation shdProg name GL.$= loc
                  link shdProg
                  liftIO $ GL.detachShader shdProg shdVtx >> GL.detachShader shdProg shdFrag
                  return shdProg
@@ -96,30 +102,30 @@ setOrtho2DProjMatrix prog uniform w h = do
                     0, 0, (-2) / 1000, -1, 
                     0, 0, 0, 1
                   ] :: [GL.GLfloat]
-    withArray ortho2D $ \ptr -> GLR.glUniformMatrix4fv loc 1 1 ptr
+    withArray ortho2D $ \ptr -> GLR.glUniformMatrix4fv loc 1 1 {- transpose -} ptr
 
 -- Shader source for basic vertex and fragment shaders
 vsSrcBasic, fsSrcBasic, fsColOnlySrcBasic :: B.ByteString
 vsSrcBasic = TE.encodeUtf8 $ T.unlines
     [ "#version 330 core"
     , "uniform mat4 in_mvp;"
-    , "layout(location = 0) in vec3 in_pos;"
-    , "layout(location = 1) in vec4 in_col;"
-    , "layout(location = 2) in vec2 in_uv;"
+ -- , "layout(location = 0) in vec3 in_pos;"
+ -- , "layout(location = 1) in vec4 in_col;"
+ -- , "layout(location = 2) in vec2 in_uv;"
+    , "in vec3 in_pos;"
+    , "in vec4 in_col;"
+    , "in vec2 in_uv;"
     , "out vec4 fs_col;"
     , "out vec2 fs_uv;"
     , "void main()"
     , "{"
-    --, "    gl_Position = vec4((in_pos.x / 512.0) * 2.0 - 1.0, (in_pos.y / 512.0) * 2.0 - 1.0, 0, 1);"
     , "    gl_Position = in_mvp * vec4(in_pos, 1.0);"
-    --, "    gl_Position.z = 0;"
-    --, "    gl_Position.w = 1;"
     , "    fs_col      = in_col;"
     , "    fs_uv       = in_uv;"
     , "}"
     ]
 fsSrcBasic = TE.encodeUtf8 $ T.unlines
-    [ "#version 150 core"
+    [ "#version 330 core"
     , "in vec4 fs_col;"
     , "in vec2 fs_uv;"
     , "uniform sampler2D tex;"
@@ -130,7 +136,7 @@ fsSrcBasic = TE.encodeUtf8 $ T.unlines
     , "}"
     ]
 fsColOnlySrcBasic = TE.encodeUtf8 $ T.unlines
-    [ "#version 150 core"
+    [ "#version 330 core"
     , "in vec4 fs_col;"
     , "out vec4 frag_color;"
     , "void main()"

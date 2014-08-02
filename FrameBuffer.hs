@@ -100,10 +100,8 @@ drawFrameBuffer FrameBuffer { .. } qb =
              0 0 (fromIntegral fbWdh) (fromIntegral fbHgt)
              10
              FCWhite
-             --(FCLeftRightGradient (RGBA 0 0 0 1) (RGBA 1 1 1 1))
              TRNone
              (Just fbTex)
-             --Nothing
              QuadUVDefault
 
 fbSize :: Integral a => Int -> Int -> a

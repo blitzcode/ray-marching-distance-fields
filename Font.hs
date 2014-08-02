@@ -37,6 +37,7 @@ withFontTexture f = do
                  srcIdx x y = x + y * fontImgWdh
                  toRGBA a = case a of 0 -> 0x0FFFFFF; _ -> 0xFFFFFFFF :: Word32
       Foreign.Marshal.Array.withArray fontTex $ \ptr ->
+          -- TODO: Just use GPU MIP-map generation
           GLU.build2DMipmaps GL.Texture2D GL.RGBA'
                              (fromIntegral fontTexWdh)
                              (fromIntegral fontTexWdh)

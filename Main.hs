@@ -51,7 +51,7 @@ main = do
         traceSystemInfo
         withFontTexture $ \_aeFontTexture ->
           withFrameBuffer w h $ \_aeFB ->
-            withQuadRenderer 1024 $ \_aeQR -> do
+            withQuadRenderer 16384 $ \_aeQR -> do
               _asCurTick <- getTick
               let as = AppState { _asLastEscPress = -1
                                 , _asFrameTimes   = BS.empty 120 -- Average over last N FPS

@@ -104,6 +104,10 @@ withQuadRenderer qrMaxQuad f = do
     vtxAttrib <- setAttribArray 0 qrVtxStride qrTotalStride qrVtxOffset
     colAttrib <- setAttribArray 1 qrColStride qrTotalStride qrColOffset
     uvAttrib  <- setAttribArray 2 qrUVStride  qrTotalStride qrUVOffset
+    let attribLocations = [ ("in_pos", vtxAttrib)
+                          , ("in_col", colAttrib)
+                          , ("in_uv" , uvAttrib )
+                          ]
     -- EBO
     let numIdx = qrMaxTri * 3
         szi    = sizeOf(0 :: GL.GLuint)
@@ -111,18 +115,11 @@ withQuadRenderer qrMaxQuad f = do
     r <- runMaybeT $ do
         -- Create, compile and link shaders
         let mkShaderProgramMaybe vsSrc fsSrc =
-                liftIO (mkShaderProgam vsSrc fsSrc) >>= \case
+                liftIO (mkShaderProgam vsSrc fsSrc attribLocations) >>= \case
                     Left err   -> do
                         liftIO $ traceS TLError $ "withQuadRenderer - Shader error:\n " ++ err
                         mzero
-                    Right prog -> liftIO $ do
-                    {-
-                        -- Set shader attributes
-                        GL.attribLocation prog "in_pos" GL.$= vtxAttrib
-                        GL.attribLocation prog "in_col" GL.$= colAttrib
-                        GL.attribLocation prog "in_uv"  GL.$= uvAttrib
-                    -}
-                        return prog
+                    Right prog -> return prog
         qrShdProgTex     <- mkShaderProgramMaybe vsSrcBasic fsSrcBasic
         qrShdProgColOnly <- mkShaderProgramMaybe vsSrcBasic fsColOnlySrcBasic
         -- Initialization done, run inner
