@@ -116,10 +116,12 @@ withQuadRenderer qrMaxQuad f = do
                         liftIO $ traceS TLError $ "withQuadRenderer - Shader error:\n " ++ err
                         mzero
                     Right prog -> liftIO $ do
+                    {-
                         -- Set shader attributes
                         GL.attribLocation prog "in_pos" GL.$= vtxAttrib
                         GL.attribLocation prog "in_col" GL.$= colAttrib
                         GL.attribLocation prog "in_uv"  GL.$= uvAttrib
+                    -}
                         return prog
         qrShdProgTex     <- mkShaderProgramMaybe vsSrcBasic fsSrcBasic
         qrShdProgColOnly <- mkShaderProgramMaybe vsSrcBasic fsColOnlySrcBasic
@@ -382,7 +384,7 @@ drawQuad (QuadRenderBuffer { .. })
                                FCBlack                 -> let c = RGBA 0 0 0 1 in (c, c, c, c)
                                FCSolid c               -> (c, c, c, c)
                                FCBottomTopGradient b t -> (b, b, t, t)
-                               FCLeftRightGradient l r -> (l, r, l, r)
+                               FCLeftRightGradient l r -> (l, r, r, l)
               !(!u0, !v0, !u1, !v1) =
                   case uv of QuadUVDefault          -> (0, 0, 1, 1)
                              QuadUV u0' v0' u1' v1' -> (u0', v0', u1', v1')
