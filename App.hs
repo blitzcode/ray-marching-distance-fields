@@ -7,6 +7,9 @@ module App ( AppState(..)
            , AppT
            , runAppT
            , run
+             -- Export to silence warnings
+           , aeFontTexture
+           , aeQR
            ) where
 
 import Control.Lens
