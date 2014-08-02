@@ -55,11 +55,10 @@ runAppT :: Monad m => AppState -> AppEnv -> AppT m a -> m a
 runAppT s e f = flip runReaderT e . flip evalStateT s $ f
 
 processAllEvents :: MonadIO m => TQueue a -> (a -> m ()) -> m ()
-processAllEvents tq processEvent = do
-    me <- liftIO . atomically $ tryReadTQueue tq
-    case me of
+processAllEvents tq processEvent =
+    (liftIO . atomically $ tryReadTQueue tq) >>= \case
         Just e -> processEvent e >> processAllEvents tq processEvent
-        _ -> return ()
+        _      -> return ()
 
 processGLFWEvent :: GLFWEvent -> AppIO ()
 processGLFWEvent ev =
@@ -81,7 +80,7 @@ processGLFWEvent ev =
                 -- Also clear frame time history on mode switch
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
-                _ -> return ()
+                _              -> return ()
         GLFWEventWindowSize {- win -} _ w h -> do
             -- TODO: Window resizing blocks event processing,
             -- see https://github.com/glfw/glfw/issues/1
@@ -99,9 +98,9 @@ processGLFWEvent ev =
 -- Move through an enumeration, but wrap around when hitting the end
 wrapSucc, wrapPred :: (Enum a, Bounded a, Eq a) => a -> a
 wrapSucc a | a == maxBound = minBound
-           | otherwise = succ a
+           | otherwise     = succ a
 wrapPred a | a == minBound = maxBound
-           | otherwise = pred a
+           | otherwise     = pred a
 
 draw :: AppIO ()
 draw = do
@@ -142,12 +141,10 @@ updateAndReturnFrameTimes = do
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
-     in return $
-          printf
-            "%.1fFPS/%.1fms (Worst: %.1f, Best: %.1f)"
-            (1.0 / fdMean ) (fdMean  * 1000)
-            (1.0 / fdWorst)
-            (1.0 / fdBest )
+     in return $ printf "%.1fFPS/%.1fms (Worst: %.1f, Best: %.1f)"
+                        (1.0 / fdMean ) (fdMean  * 1000)
+                        (1.0 / fdWorst)
+                        (1.0 / fdBest )
 
 drawTextWithShadow :: GL.TextureObject -> Int -> Int -> String -> IO ()
 drawTextWithShadow tex x y str = do
