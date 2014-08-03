@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase, ScopedTypeVariables #-}
 
 module GLHelpers ( getGLStrings
+                 , getGLExtensionList
                  , traceOnGLError
                  , throwOnGLError
                  , getCurTex2DSize
@@ -25,6 +26,7 @@ import Data.Maybe
 import Foreign.Marshal.Alloc
 import Foreign.Storable
 import Foreign.Ptr
+import Foreign.C.String
 
 import Trace
 
@@ -43,18 +45,29 @@ traceOnGLError context = getErrors context >>= maybe (return ()) (traceS TLError
 throwOnGLError :: Maybe String -> IO ()
 throwOnGLError context = getErrors context >>= maybe (return ()) (throwIO . ErrorCall)
 
+-- No wrapper around the OpenGL 3 extension APIs yet, have to use the raw ones
+getNumExtensions :: IO Int
+getNumExtensions =
+    alloca $ \(ptr :: Ptr GLR.GLint) ->
+        GLR.glGetIntegerv GLR.gl_NUM_EXTENSIONS ptr >> fromIntegral <$> peek ptr
+getExtensionStr :: Int -> IO String
+getExtensionStr i =
+    peekCString =<< castPtr <$> GLR.glGetStringi GLR.gl_EXTENSIONS (fromIntegral i)
+
+getGLExtensionList :: IO [String]
+getGLExtensionList =
+  getNumExtensions >>= \numExt -> forM [0..numExt - 1] $ \i -> getExtensionStr i
+
 getGLStrings :: IO String
 getGLStrings = do
-  -- No wrapper around the OpenGL 3 extension APIs yet, have to use the raw ones
-  numExt <-
-      alloca $ \(ptr :: Ptr GLR.GLint) -> GLR.glGetIntegerv GLR.gl_NUM_EXTENSIONS ptr >> peek ptr
+  numExt <- getNumExtensions
   printf
       "OpenGL - Vendor: %s · Renderer: %s · Version: %s · GLSL: %s · Num Extensions: %i · GLFW: %s"
       <$> GL.get GL.vendor
       <*> GL.get GL.renderer
       <*> GL.get GL.glVersion
       <*> GL.get GL.shadingLanguageVersion
-      <*> (pure $ fromIntegral numExt :: IO Int)
+      <*> (pure $ numExt)
       <*> (fromJust <$> GLFW.getVersionString)
 
 getCurTex2DSize :: IO (Int, Int)

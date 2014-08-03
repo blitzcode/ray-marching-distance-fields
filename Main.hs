@@ -39,6 +39,7 @@ traceSystemInfo = do
              ]
         )
         <$> (("\n" ++) <$> getGLStrings)
+    -- mapM_ (traceS TLInfo) =<< getGLExtensionList
 
 main :: IO ()
 main = do
