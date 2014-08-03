@@ -263,7 +263,7 @@ drawRenderBuffer (QuadRenderBuffer { .. }) w h = do
                                       (fromIntegral numIdx)
                                       GL.UnsignedInt
                                       $ nullPtr `plusPtr` (i * szi)
-                  return $ (newA, i + numIdx)
+                  return (newA, i + numIdx)
             )
             (initialState, 0)
             attribs

@@ -25,9 +25,10 @@ withFontTexture f = do
       GL.textureBinding GL.Texture2D GL.$= Just tex
       setTextureFiltering TFMinOnly
       -- Convert font grid bitmap image from Word32 list into byte array
-      let fontImgArray = VU.fromListN (16 * 16 * 6 * 12 `div` 8) .
-                         concatMap (\x -> map (extractByte x) [0..3]) $ miscFixed6x12Data
-                         :: VU.Vector Word8
+      let fontImgArray =
+              VU.fromListN (fontGridWdh * fontGridHgt * fontCharWdh * fontCharHgt `div` 8) .
+                  concatMap (\x -> map (extractByte x) [0..3]) $ miscFixed6x12Data
+                      :: VU.Vector Word8
       -- Extract bits (reversed in byte), store transparent / opaque pixels in square texture
       let fontTex = [toRGBA $ texel x y | y <- [0..fontTexWdh - 1], x <- [0..fontTexWdh - 1]]
            where texel x y = (srcLookup x y .&. (1 `shiftL` (7 - (srcIdx x y `mod` 8))))

@@ -45,6 +45,7 @@ throwOnGLError context = getErrors context >>= maybe (return ()) (throwIO . Erro
 
 getGLStrings :: IO String
 getGLStrings = do
+  -- No wrapper around the OpenGL 3 extension APIs yet, have to use the raw ones
   numExt <-
       alloca $ \(ptr :: Ptr GLR.GLint) -> GLR.glGetIntegerv GLR.gl_NUM_EXTENSIONS ptr >> peek ptr
   printf
