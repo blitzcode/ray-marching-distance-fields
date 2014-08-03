@@ -4,7 +4,7 @@
 module Shaders ( vsSrcBasic
                , fsSrcBasic
                , fsColOnlySrcBasic
-               , mkShaderProgam
+               , mkShaderProgram
                , setAttribArray
                , setTextureShader
                , setOrtho2DProjMatrix
@@ -28,11 +28,11 @@ import QQPlainText
 
 -- GLSL shaders and support functions
 
-mkShaderProgam :: B.ByteString
-               -> B.ByteString
-               -> [(String, GL.AttribLocation)]
-               -> IO (Either String GL.Program)
-mkShaderProgam vsSrc fsSrc attribLocations =
+mkShaderProgram :: B.ByteString
+                -> B.ByteString
+                -> [(String, GL.AttribLocation)]
+                -> IO (Either String GL.Program)
+mkShaderProgram vsSrc fsSrc attribLocations =
     -- Always delete the shaders (don't need them after linking), only delete the program
     -- on error
     bracket        (GL.createShader GL.VertexShader  ) (GL.deleteObjectName) $ \shdVtx  ->

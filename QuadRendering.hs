@@ -28,10 +28,11 @@ import Control.Applicative
 import Control.Monad
 import Control.Exception
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Control
+import Control.Monad.Except
 import Control.DeepSeq
 import Data.IORef
+import Data.Either
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import Foreign.Storable
@@ -44,6 +45,9 @@ import QuadTypes
 
 -- Module for efficient rendering of 2D quad primitives, used for UI elements and texture
 -- mapped font rendering
+--
+-- TODO: We could speed this up quite a bit by using a geometry shader, significantly
+--       reducing the amount of vertex and index data we have to generate and write
 
 data QuadRenderer = QuadRenderer
     { -- Vertex / Element Array Buffer Objects and layout
@@ -67,77 +71,68 @@ data QuadRenderer = QuadRenderer
     , qrRenderStats    :: !(IORef String)
     }
 
--- Create, bind and allocate Vertex / Element Array Buffer Object (VBO / EBO)
-mkBindDynamicBO :: GL.BufferTarget -> Int -> IO GL.BufferObject
-mkBindDynamicBO target size = do
-    bo <- GL.genObjectName
+-- Bind and allocate Vertex / Element Array Buffer Object (VBO / EBO)
+bindAllocateDynamicBO :: GL.BufferObject -> GL.BufferTarget -> Int -> IO ()
+bindAllocateDynamicBO bo target size = do
     GL.bindBuffer target GL.$= Just bo
     GL.bufferData target GL.$= ( fromIntegral size -- In bytes
                                , nullPtr
                                , GL.StreamDraw -- Dynamic
                                )
-    traceOnGLError $ Just "mkBindDynamicBO"
-    return bo
 
 -- Initialize / clean up all OpenGL resources for our renderer
 withQuadRenderer :: Int -> (QuadRenderer -> IO a) -> IO a
-withQuadRenderer qrMaxQuad f = do
-    traceOnGLError $ Just "withQuadRenderer begin"
-    qrRenderStats <- newIORef ""
-    -- VAO
-    qrVAO <- GL.genObjectName
-    GL.bindVertexArrayObject GL.$= Just qrVAO
-    -- VBO
-    let szf           = sizeOf (0 :: Float)
-        qrVtxStride   = 3
-        qrColStride   = 4
-        qrUVStride    = 2
-        qrTotalStride = qrVtxStride + qrColStride + qrUVStride
-        qrMaxTri      = qrMaxQuad * 2
-        qrMaxVtx      = qrMaxTri * 4
-        numfloat      = qrTotalStride * qrMaxVtx
-        qrVtxOffset   = 0
-        qrColOffset   = qrVtxOffset + qrVtxStride
-        qrUVOffset    = qrColOffset + qrColStride
-    qrVBO <- mkBindDynamicBO GL.ArrayBuffer $ numfloat * szf
-    -- Specify and enable vertex attribute arrays
-    vtxAttrib <- setAttribArray 0 qrVtxStride qrTotalStride qrVtxOffset
-    colAttrib <- setAttribArray 1 qrColStride qrTotalStride qrColOffset
-    uvAttrib  <- setAttribArray 2 qrUVStride  qrTotalStride qrUVOffset
-    let attribLocations = [ ("in_pos", vtxAttrib)
-                          , ("in_col", colAttrib)
-                          , ("in_uv" , uvAttrib )
-                          ]
-    -- EBO
-    let numIdx = qrMaxTri * 3
-        szi    = sizeOf(0 :: GL.GLuint)
-    qrEBO <- mkBindDynamicBO GL.ElementArrayBuffer $ numIdx * szi
-    r <- runMaybeT $ do
-        -- Create, compile and link shaders
-        let mkShaderProgramMaybe vsSrc fsSrc =
-                liftIO (mkShaderProgam vsSrc fsSrc attribLocations) >>= \case
-                    Left err   -> do
-                        liftIO $ traceS TLError $ "withQuadRenderer - Shader error:\n " ++ err
-                        mzero
-                    Right prog -> return prog
-        qrShdProgTex     <- mkShaderProgramMaybe vsSrcBasic fsSrcBasic
-        qrShdProgColOnly <- mkShaderProgramMaybe vsSrcBasic fsColOnlySrcBasic
-        -- Initialization done, run inner
-        liftIO $ do
-            disableVAOAndShaders
-            traceOnGLError $ Just "withQuadRenderer begin inner"
-            finally
-                ( f $ QuadRenderer { .. } )
-                ( do -- Cleanup
-                     GL.deleteObjectName qrVAO
-                     GL.deleteObjectNames [qrVBO, qrEBO]
-                     GL.deleteObjectNames [qrShdProgTex, qrShdProgColOnly]
-                     traceOnGLError $ Just "withQuadRenderer after cleanup"
-                )
-    -- Throw on error
-    case r of
-        Nothing -> traceAndThrow "withQuadRenderer - Shader init failed"
-        Just r' -> return r'
+withQuadRenderer qrMaxQuad f =
+    (traceOnGLError (Just "withQuadRenderer begin") >>) $
+    -- Allocate OpenGL objects
+    let glBracket bo = bracket GL.genObjectName GL.deleteObjectName bo
+     in glBracket $ \qrVAO ->
+        glBracket $ \qrVBO ->
+        glBracket $ \qrEBO -> do
+            qrRenderStats <- newIORef ""
+            -- VAO
+            GL.bindVertexArrayObject GL.$= Just qrVAO
+            -- VBO
+            let szf           = sizeOf (0 :: Float)
+                qrVtxStride   = 3
+                qrColStride   = 4
+                qrUVStride    = 2
+                qrTotalStride = qrVtxStride + qrColStride + qrUVStride
+                qrMaxTri      = qrMaxQuad * 2
+                qrMaxVtx      = qrMaxTri * 4
+                numfloat      = qrTotalStride * qrMaxVtx
+                qrVtxOffset   = 0
+                qrColOffset   = qrVtxOffset + qrVtxStride
+                qrUVOffset    = qrColOffset + qrColStride
+            bindAllocateDynamicBO qrVBO GL.ArrayBuffer $ numfloat * szf
+            -- Specify and enable vertex attribute arrays
+            vtxAttrib <- setAttribArray 0 qrVtxStride qrTotalStride qrVtxOffset
+            colAttrib <- setAttribArray 1 qrColStride qrTotalStride qrColOffset
+            uvAttrib  <- setAttribArray 2 qrUVStride  qrTotalStride qrUVOffset
+            let attribLocations = [ ("in_pos", vtxAttrib)
+                                  , ("in_col", colAttrib)
+                                  , ("in_uv" , uvAttrib )
+                                  ]
+            -- EBO
+            let numIdx = qrMaxTri * 3
+                szi    = sizeOf(0 :: GL.GLuint)
+            bindAllocateDynamicBO qrEBO GL.ElementArrayBuffer $ numIdx * szi
+            -- Create, compile and link shaders
+            r <- bracket (mkShaderProgram vsSrcBasic fsSrcBasic attribLocations)
+                         (GL.deleteObjectNames . rights . (: [])) $ \shdProgTex ->
+                 bracket (mkShaderProgram vsSrcBasic fsColOnlySrcBasic attribLocations)
+                         (GL.deleteObjectNames . rights . (: [])) $ \shdProgColOnly ->
+                 runExceptT $ do
+                     qrShdProgTex     <- either throwError return shdProgTex
+                     qrShdProgColOnly <- either throwError return shdProgColOnly
+                     -- Initialization done, run inner
+                     liftIO $ do
+                         disableVAOAndShaders
+                         traceOnGLError $ Just "withQuadRenderer begin inner"
+                         finally
+                             ( f $ QuadRenderer { .. } )
+                             ( traceOnGLError $ Just "withQuadRenderer after inner" )
+            either (traceAndThrow . printf "withQuadRenderer - Shader init failed:\n%s") return r
 
 -- TODO: Write an Unbox instance for this and switch to an unboxed mutable vector
 data QuadRenderAttrib = QuadRenderAttrib
