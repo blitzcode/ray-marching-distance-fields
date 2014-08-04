@@ -1,7 +1,7 @@
 
 {-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
 
-module LensTest where
+module Experiments.LensTest where
 
 import Control.Lens
 import Control.Applicative
@@ -49,6 +49,7 @@ zoomTest2 = do
 -- (Data.Set.fromList ["one", "two", "three"]) ^. contains "one"
 -- (Left 2) & _Left %~ succ
 -- flip runState (Left (10 :: Int)) $ _Left %= succ
+-- flip execStateT (0 :: Int) $ forM_ ([1..10] :: [Int]) $ \i -> id += 1
 
 evenPrism :: (Integral a) => Prism' a a
 evenPrism = prism id $ \i -> if even i then Right i else Left i
