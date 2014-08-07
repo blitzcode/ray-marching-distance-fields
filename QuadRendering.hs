@@ -84,7 +84,7 @@ bindAllocateDynamicBO bo target size = do
 -- Initialize / clean up all OpenGL resources for our renderer
 withQuadRenderer :: Int -> (QuadRenderer -> IO a) -> IO a
 withQuadRenderer qrMaxQuad f =
-    (traceOnGLError (Just "withQuadRenderer begin") >>) $
+    traceOnGLError (Just "withQuadRenderer begin") >>
     -- Allocate OpenGL objects
     let glBracket bo = bracket GL.genObjectName GL.deleteObjectName bo
      in glBracket $ \qrVAO ->

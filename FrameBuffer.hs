@@ -118,7 +118,7 @@ allocPBO FrameBuffer { .. } =
 saveFBToPNG :: FrameBuffer -> FilePath -> IO ()
 saveFBToPNG FrameBuffer { .. } fn = do
     GL.textureBinding GL.Texture2D GL.$= Just fbTex
-    img <- VSM.new $ fbWdh * fbHgt * sizeOf(0 :: Word32) :: IO (VSM.IOVector JP.Pixel8)
+    img <- VSM.new $ fbSize fbWdh fbHgt :: IO (VSM.IOVector JP.Pixel8)
     (tw, th) <- getCurTex2DSize
     (tw == fbWdh && th == fbHgt) `assert` VSM.unsafeWith img $
         GL.getTexImage GL.Texture2D 0 . GL.PixelData GL.RGBA GL.UnsignedByte
