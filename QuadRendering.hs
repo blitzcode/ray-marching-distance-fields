@@ -33,7 +33,6 @@ import Control.Monad.Trans.Resource
 import Control.Monad.Except
 import Control.DeepSeq
 import Data.IORef
-import Data.Either
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import Foreign.Storable
@@ -175,10 +174,10 @@ withQuadRenderBuffer qbQR@(QuadRenderer { .. }) w h f = do
     -- the mapping operation will fail as OpenGL does not allow two concurrent mappings. Hence,
     -- no need to check for this explicitly
     r <- control $ \run -> liftIO $
-        let bindVAO = GL.bindVertexArrayObject GL.$= Just qrVAO
+        let bindVBO = GL.bindBuffer GL.ArrayBuffer GL.$= Just qrVBO
             -- TODO: We could use glMapBufferRange instead and safe some work for
             --       partially filled buffers, get asynchronous transfers etc.
-        in  bindVAO >> GL.withMappedBuffer -- VBO
+        in  bindVBO >> GL.withMappedBuffer -- VBO
                 GL.ArrayBuffer
                 GL.WriteOnly
                 ( \ptrVBO -> newForeignPtr_ ptrVBO >>= \fpVBO ->
@@ -192,7 +191,7 @@ withQuadRenderBuffer qbQR@(QuadRenderer { .. }) w h f = do
                                        r <- f qb
                                        return $ Just (r, qb)
                                  )
-                                 bindVAO -- Make sure we rebind our VAO, otherwise
+                                 bindVBO -- Make sure we rebind our VBO, otherwise
                                          -- unmapping might fail if the inner
                                          -- modified the bound buffer objects
                 )
