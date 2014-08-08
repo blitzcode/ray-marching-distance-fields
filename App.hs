@@ -40,6 +40,7 @@ data AppState = AppState { _asCurTick      :: !Double
                          , _asLastEscPress :: !Double
                          , _asFrameTimes   :: BS.BoundedSequence Double
                          , _asMode         :: !Mode
+                         , _asFBScale      :: !Float
                          }
 
 data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
@@ -74,7 +75,7 @@ processGLFWEvent ev =
            liftIO $ do
                traceS TLError $ "GLFW Error " ++ show e ++ " " ++ show s
                GLFW.setWindowShouldClose window True
-        GLFWEventKey win k {- sc -} _ ks {- mk -} _ | ks == GLFW.KeyState'Pressed ->
+        GLFWEventKey win k {- sc -} _ ks mk | ks == GLFW.KeyState'Pressed ->
             case k of
                 GLFW.Key'Escape -> do
                     lastPress <- use asLastEscPress
@@ -89,10 +90,11 @@ processGLFWEvent ev =
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFBToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
+                GLFW.Key'L
+                    | GLFW.modifierKeysShift mk -> asFBScale %= min 4     . (* 2) >> resize
+                    | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
                 _              -> return ()
-        GLFWEventFramebufferSize {- win -} _ w h -> do
-            liftIO $ setupViewport w h
-            view aeFB >>= \fb -> liftIO $ resizeFrameBuffer fb w h
+        GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
         --     liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
         --     return ()
@@ -103,6 +105,18 @@ processGLFWEvent ev =
         -- GLFWEventScroll win x y -> do
         --     return ()
         _ -> return ()
+
+-- Handle changes in window and frame buffer size / scaling
+resize :: AppIO ()
+resize = do
+    scale  <- use asFBScale
+    window <- view aeWindow
+    fb     <- view aeFB
+    liftIO $ do (w, h) <- GLFW.getFramebufferSize window
+                setupViewport w h
+                resizeFrameBuffer fb
+                                  (round $ fromIntegral w * scale)
+                                  (round $ fromIntegral h * scale)
 
 -- Move through an enumeration, but wrap around when hitting the end
 wrapSucc, wrapPred :: (Enum a, Bounded a, Eq a) => a -> a
@@ -134,11 +148,17 @@ draw = do
             liftIO $ drawFrameBuffer _aeFB qb 0 0 (fromIntegral w) (fromIntegral h)
             -- FPS counter and mode display
             ftStr <- updateAndReturnFrameTimes
-            liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
-                printf "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n%s"
+            (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
+            liftIO . drawText _aeFontTexture qb 3 (h - 12) 0x0000FF00 $
+                printf ( "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n" ++
+                         "FB Sca[l]e: %fx, Dim %ix%i | %s"
+                       )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
                        (show _asMode)
+                       _asFBScale
+                       fbWdh
+                       fbHgt
                        ftStr
 
 updateAndReturnFrameTimes :: MonadState AppState m => m String
@@ -157,19 +177,17 @@ updateAndReturnFrameTimes = do
                         (1.0 / fdWorst)
                         (1.0 / fdBest )
 
-drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
-drawTextWithShadow tex qb x y str = do
-    drawText tex qb (x + 1) (y - 1) 0x007F7F7F str
-    drawText tex qb  x       y      0x0000FF00 str
+-- drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
+-- drawTextWithShadow tex qb x y str = do
+--     drawText tex qb (x + 1) (y - 1) 0x007F7F7F str
+--     drawText tex qb  x       y      0x0000FF00 str
 
 run :: AppIO ()
 run = do
     -- Setup OpenGL / GLFW
     window <- view aeWindow
-    liftIO $ do
-        (w, h) <- liftIO $ GLFW.getFramebufferSize window
-        setupViewport w h
-        GLFW.swapInterval 0
+    resize
+    liftIO $ GLFW.swapInterval 0
     -- Main loop
     let loop = do
           time <- liftIO $ getTick

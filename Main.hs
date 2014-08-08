@@ -57,6 +57,7 @@ main = do
               let as = AppState { _asLastEscPress = -1
                                 , _asFrameTimes   = BS.empty 120 -- Average over last N FPS
                                 , _asMode         = ModeJuliaAnimSmooth
+                                , _asFBScale      = 1
                                 , ..
                                 }
                   ae = AppEnv { .. }

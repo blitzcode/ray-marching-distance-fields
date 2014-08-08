@@ -6,6 +6,7 @@ module FrameBuffer ( withFrameBuffer
                    , drawFrameBuffer
                    , saveFBToPNG
                    , resizeFrameBuffer
+                   , getFrameBufferDim
                    , FrameBuffer
                    ) where
 
@@ -41,19 +42,20 @@ withFrameBuffer w h f = do
     r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbPBO -> do
              GL.textureBinding GL.Texture2D GL.$= Just fbTex
-             setTextureFiltering TFMagOnly
-             GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
-             fbDim <- newIORef (w, h)
-             let fb = FrameBuffer { .. }
-             allocPBO fb
+             setTextureFiltering TFMagOnly -- Otherwise we'd need to use automatic MIP-map gen.
+             setTextureClampST -- No wrap-around artifacts at the FB borders
              GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
              traceOnGLError $ Just "withFrameBuffer begin inner"
-             f fb
+             fbDim <- newIORef (w, h)
+             f FrameBuffer { .. }
     traceOnGLError $ Just "withFrameBuffer after cleanup"
     return r
 
 resizeFrameBuffer :: FrameBuffer -> Int -> Int -> IO ()
 resizeFrameBuffer fb w h = writeIORef (fbDim fb) (w, h)
+
+getFrameBufferDim :: FrameBuffer -> IO (Int, Int)
+getFrameBufferDim fb = readIORef $ fbDim fb
 
 fillFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
                 => FrameBuffer
