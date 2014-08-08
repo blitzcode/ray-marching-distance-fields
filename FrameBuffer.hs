@@ -132,23 +132,18 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
              -- we're using the raw APIs as a backup
              GLR.glCheckFramebufferStatus GLR.gl_FRAMEBUFFER >>= \case
                  r | r == GLR.gl_FRAMEBUFFER_COMPLETE -> run $ Just <$> f w h
-                 r -> do traceS TLError $ printf
+                   | otherwise                        -> do
+                         traceS TLError $ printf
                              "drawIntoFrameBuffer, glCheckFramebufferStatus: 0x%x"
                              (fromIntegral r :: Int)
                          run $ return Nothing
         )
         ( GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject )
 
+-- Draw quad with frame buffer texture
 drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> Float -> Float -> Float -> Float -> IO ()
 drawFrameBuffer FrameBuffer { .. } qb x1 y1 x2 y2 =
-    -- Draw quad with frame buffer texture
-    drawQuad qb
-             x1 y1 x2 y2
-             10
-             FCWhite
-             TRNone
-             (Just fbTex)
-             QuadUVDefault
+    drawQuad qb x1 y1 x2 y2 10 FCWhite TRNone (Just fbTex) QuadUVDefault
 
 fbSizeB :: Integral a => Int -> Int -> a
 fbSizeB w h = fromIntegral $ w * h * sizeOf (0 :: Word32)

@@ -33,7 +33,10 @@ import Fractal2D
 import QuadRendering
 import qualified BoundedSequence as BS
 
-data Mode = ModeJuliaAnim | ModeJuliaAnimSmooth | ModeMandelBrot | ModeMandelBrotSmooth
+data Mode = ModeJuliaAnim
+          | ModeJuliaAnimSmooth
+          | ModeMandelBrot
+          | ModeMandelBrotSmooth
             deriving (Enum, Eq, Bounded, Show)
 
 data AppState = AppState { _asCurTick      :: !Double
