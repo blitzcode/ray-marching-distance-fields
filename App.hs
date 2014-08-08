@@ -90,8 +90,9 @@ processGLFWEvent ev =
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
                 _              -> return ()
-        GLFWEventFramebufferSize {- win -} _ w h ->
+        GLFWEventFramebufferSize {- win -} _ w h -> do
             liftIO $ setupViewport w h
+            view aeFB >>= \fb -> liftIO $ resizeFrameBuffer fb w h
         -- GLFWEventWindowSize {- win -} _ w h -> do
         --     liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
         --     return ()

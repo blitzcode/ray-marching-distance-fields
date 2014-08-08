@@ -5,6 +5,7 @@ module FrameBuffer ( withFrameBuffer
                    , fillFrameBuffer
                    , drawFrameBuffer
                    , saveFBToPNG
+                   , resizeFrameBuffer
                    , FrameBuffer
                    ) where
 
@@ -14,6 +15,7 @@ import Control.Monad.Trans.Control
 import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import Data.Word
+import Data.IORef
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Data.Vector.Storable as VS
 import Foreign.Storable
@@ -30,25 +32,28 @@ import Trace
 
 data FrameBuffer = FrameBuffer { fbTex :: !GL.TextureObject
                                , fbPBO :: !GL.BufferObject
-                               , fbWdh :: !Int
-                               , fbHgt :: !Int
+                               , fbDim :: IORef (Int, Int)
                                }
 
 withFrameBuffer :: Int -> Int -> (FrameBuffer -> IO a) -> IO a
-withFrameBuffer fbWdh fbHgt f = do
-  traceOnGLError $ Just "withFrameBuffer begin"
-  r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
+withFrameBuffer w h f = do
+    traceOnGLError $ Just "withFrameBuffer begin"
+    r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbPBO -> do
-           GL.textureBinding GL.Texture2D GL.$= Just fbTex
-           setTextureFiltering TFMagOnly
-           GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
-           let fb = FrameBuffer { .. }
-           allocPBO fb
-           GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
-           traceOnGLError $ Just "withFrameBuffer begin inner"
-           f fb
-  traceOnGLError $ Just "withFrameBuffer after cleanup"
-  return r
+             GL.textureBinding GL.Texture2D GL.$= Just fbTex
+             setTextureFiltering TFMagOnly
+             GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
+             fbDim <- newIORef (w, h)
+             let fb = FrameBuffer { .. }
+             allocPBO fb
+             GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
+             traceOnGLError $ Just "withFrameBuffer begin inner"
+             f fb
+    traceOnGLError $ Just "withFrameBuffer after cleanup"
+    return r
+
+resizeFrameBuffer :: FrameBuffer -> Int -> Int -> IO ()
+resizeFrameBuffer fb w h = writeIORef (fbDim fb) (w, h)
 
 fillFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
                 => FrameBuffer
@@ -58,6 +63,7 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
     -- Map. If this function is nested inside another fillFrameBuffer with the same FrameBuffer,
     -- the mapping operation will fail as OpenGL does not allow two concurrent mappings. Hence,
     -- no need to check for this explicitly
+    (w, h) <- liftIO $ readIORef fbDim
     r <- control $ \run -> liftIO $ do
       let bindPBO = GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
           -- Prevent stalls by just allocating new PBO storage every time
@@ -66,10 +72,8 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
             GL.WriteOnly
             ( \ptrPBO -> newForeignPtr_ ptrPBO >>= \fpPBO ->
                 finally
-                  ( -- Run in outer base monad
-                    run $ Just <$> f fbWdh fbHgt
-                      (VSM.unsafeFromForeignPtr0 fpPBO $ fbSize fbWdh fbHgt)
-                  )
+                  -- Run in outer base monad
+                  ( run $ Just <$> f w h (VSM.unsafeFromForeignPtr0 fpPBO $ fbSizeB w h) )
                   bindPBO -- Make sure we rebind our PBO, otherwise
                           -- unmapping might fail if the inner
                           -- modified the bound buffer objects
@@ -85,7 +89,7 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
                              GL.NoProxy
                              0
                              GL.RGBA8
-                             (GL.TextureSize2D (fromIntegral fbWdh) (fromIntegral fbHgt))
+                             (GL.TextureSize2D (fromIntegral w) (fromIntegral h))
                              0
                              (GL.PixelData GL.RGBA GL.UnsignedByte nullPtr)
       -- Done
@@ -95,7 +99,7 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
 
 drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> Float -> Float -> Float -> Float -> IO ()
 drawFrameBuffer FrameBuffer { .. } qb x1 y1 x2 y2  =
-    -- Draw full screen quad 
+    -- Draw quad with frame buffer texture
     drawQuad qb
              x1 y1 x2 y2
              10
@@ -104,30 +108,30 @@ drawFrameBuffer FrameBuffer { .. } qb x1 y1 x2 y2  =
              (Just fbTex)
              QuadUVDefault
 
-fbSize :: Integral a => Int -> Int -> a
-fbSize w h = fromIntegral $ w * h * sizeOf (0 :: Word32)
+fbSizeB :: Integral a => Int -> Int -> a
+fbSizeB w h = fromIntegral $ w * h * sizeOf (0 :: Word32)
 
 -- Allocate new frame buffer sized backing storage for the bound PBO
 allocPBO :: FrameBuffer -> IO ()
-allocPBO FrameBuffer { .. } =
-    GL.bufferData GL.PixelUnpackBuffer GL.$= ( fbSize fbWdh fbHgt -- In bytes
-                                             , nullPtr            -- Just allocate
-                                             , GL.StreamDraw      -- Dynamic
+allocPBO FrameBuffer { .. } = do
+    (w, h) <- readIORef fbDim
+    GL.bufferData GL.PixelUnpackBuffer GL.$= ( fbSizeB w h   -- In bytes
+                                             , nullPtr       -- Just allocate
+                                             , GL.StreamDraw -- Dynamic
                                              )
 
 saveFBToPNG :: FrameBuffer -> FilePath -> IO ()
 saveFBToPNG FrameBuffer { .. } fn = do
     GL.textureBinding GL.Texture2D GL.$= Just fbTex
-    img <- VSM.new $ fbSize fbWdh fbHgt :: IO (VSM.IOVector JP.Pixel8)
-    (tw, th) <- getCurTex2DSize
-    (tw == fbWdh && th == fbHgt) `assert` VSM.unsafeWith img $
-        GL.getTexImage GL.Texture2D 0 . GL.PixelData GL.RGBA GL.UnsignedByte
+    (w, h) <- getCurTex2DSize
+    img    <- VSM.new $ fbSizeB w h :: IO (VSM.IOVector JP.Pixel8)
+    VSM.unsafeWith img $ GL.getTexImage GL.Texture2D 0 . GL.PixelData GL.RGBA GL.UnsignedByte
     GL.textureBinding GL.Texture2D GL.$= Nothing
     let flipAndFixA img' =
           JP.generateImage
-            ( \x y -> case JP.pixelAt img' x (fbHgt - 1 - y) of
+            ( \x y -> case JP.pixelAt img' x (h - 1 - y) of
                           JP.PixelRGBA8 r g b _ -> JP.PixelRGBA8 r g b 0xFF
-            ) fbWdh fbHgt
-     in JP.savePngImage fn . JP.ImageRGBA8 . flipAndFixA . JP.Image fbWdh fbHgt =<< VS.freeze img
+            ) w h
+     in JP.savePngImage fn . JP.ImageRGBA8 . flipAndFixA . JP.Image w h =<< VS.freeze img
     traceS TLInfo $ "Saved screenshot of framebuffer to " ++ fn
 
