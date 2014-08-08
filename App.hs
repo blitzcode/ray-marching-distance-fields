@@ -38,6 +38,7 @@ data Mode = ModeJuliaAnim
           | ModeJuliaAnimSmooth
           | ModeMandelBrot
           | ModeMandelBrotSmooth
+          | ModeShaderTest
             deriving (Enum, Eq, Bounded, Show)
 
 data AppState = AppState { _asCurTick      :: !Double
@@ -140,20 +141,18 @@ draw = do
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
     -- Draw fractal into our frame buffer texture
-    void . fillFrameBuffer _aeFB $ \w h fbVec ->
-        liftIO $ case _asMode of
-            ModeJuliaAnim        -> juliaAnimated w h fbVec False _asCurTick
-            ModeJuliaAnimSmooth  -> juliaAnimated w h fbVec True  _asCurTick
-            ModeMandelBrot       -> mandelbrot    w h fbVec False
-            ModeMandelBrotSmooth -> mandelbrot    w h fbVec True
-    {-
-    void . drawIntoFrameBuffer _aeFB $ \w h -> do
-        liftIO $ GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
-        liftIO $ GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-        --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
-          --  liftIO $ drawText _aeFontTexture qb 3 3 0x00000000 "This is a test"
-        liftIO $ drawGPUFractal3D _aeGPUFrac3D
-    -}
+    let fillFB = void . fillFrameBuffer _aeFB
+        drawFB = void . drawIntoFrameBuffer _aeFB
+     in liftIO $ case _asMode of
+        ModeJuliaAnim        -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
+        ModeJuliaAnimSmooth  -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
+        ModeMandelBrot       -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
+        ModeMandelBrotSmooth -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
+        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D
+                                --GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
+                                --GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+                                --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
+                                  --  liftIO $ drawText _aeFontTexture qb 3 3 0x00000000 "Test"
     -- Render everything quad based
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do
