@@ -29,6 +29,7 @@ import Control.Monad
 import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control
+import Control.Monad.Trans.Resource
 import Control.Monad.Except
 import Control.DeepSeq
 import Data.IORef
@@ -119,13 +120,11 @@ withQuadRenderer qrMaxQuad f =
                 szi    = sizeOf(0 :: GL.GLuint)
             bindAllocateDynamicBO qrEBO GL.ElementArrayBuffer $ numIdx * szi
             -- Create, compile and link shaders
-            r <- bracket (mkShaderProgram vsSrcBasic fsSrcBasic attribLocations)
-                         (GL.deleteObjectNames . rights . (: [])) $ \shdProgTex ->
-                 bracket (mkShaderProgram vsSrcBasic fsColOnlySrcBasic attribLocations)
-                         (GL.deleteObjectNames . rights . (: [])) $ \shdProgColOnly ->
-                 runExceptT $ do
-                     qrShdProgTex     <- either throwError return shdProgTex
-                     qrShdProgColOnly <- either throwError return shdProgColOnly
+            r <- runExceptT . runResourceT $ do
+                     qrShdProgTex     <- tryMkShaderResource $
+                         mkShaderProgram vsSrcBasic fsSrcBasic attribLocations
+                     qrShdProgColOnly <- tryMkShaderResource $
+                         mkShaderProgram vsSrcBasic fsColOnlySrcBasic attribLocations
                      -- Initialization done, run inner
                      liftIO $ do
                          disableVAOAndShaders
