@@ -13,6 +13,7 @@ module GLHelpers ( getGLStrings
                  , setTextureClampST
                  , TextureFiltering(..)
                  , setupViewport
+                 , genObjectNameResource
                  ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
@@ -21,6 +22,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Control.Applicative
 import Control.Monad
 import Control.Exception
+import Control.Monad.Trans.Resource
 import Text.Printf
 import Data.Maybe
 import Foreign.Marshal.Alloc
@@ -115,4 +117,8 @@ disableVAOAndShaders = do
 
 setupViewport :: Int -> Int -> IO ()
 setupViewport w h = GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
+
+-- Allocate OpenGL object name in ResourceT
+genObjectNameResource :: (GL.GeneratableObjectName a, MonadResource m) => m a
+genObjectNameResource = snd <$> allocate GL.genObjectName GL.deleteObjectName
 
