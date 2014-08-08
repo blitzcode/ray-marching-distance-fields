@@ -30,6 +30,7 @@ import Trace
 import Font
 import FrameBuffer
 import Fractal2D
+import GPUFractal3D
 import QuadRendering
 import qualified BoundedSequence as BS
 
@@ -51,6 +52,7 @@ data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
                      , _aeFontTexture     :: GL.TextureObject
                      , _aeFB              :: FrameBuffer
                      , _aeQR              :: QuadRenderer
+                     , _aeGPUFrac3D       :: GPUFractal3D
                      }
 
 makeLenses ''AppState
@@ -144,6 +146,14 @@ draw = do
             ModeJuliaAnimSmooth  -> juliaAnimated w h fbVec True  _asCurTick
             ModeMandelBrot       -> mandelbrot    w h fbVec False
             ModeMandelBrotSmooth -> mandelbrot    w h fbVec True
+    {-
+    void . drawIntoFrameBuffer _aeFB $ \w h -> do
+        liftIO $ GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
+        liftIO $ GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+        --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
+          --  liftIO $ drawText _aeFontTexture qb 3 3 0x00000000 "This is a test"
+        liftIO $ drawGPUFractal3D _aeGPUFrac3D
+    -}
     -- Render everything quad based
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do

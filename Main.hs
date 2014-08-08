@@ -18,6 +18,7 @@ import Timing
 import Font
 import FrameBuffer
 import QuadRendering
+import GPUFractal3D
 import qualified BoundedSequence as BS
 
 runOnAllCores :: IO ()
@@ -48,18 +49,19 @@ main = do
       _aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
       let w = 512
           h = 512
-       in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow -> do
-        traceSystemInfo
-        withFontTexture $ \_aeFontTexture ->
+       in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow ->
+          withFontTexture $ \_aeFontTexture ->
           withFrameBuffer w h $ \_aeFB ->
-            withQuadRenderer 16384 $ \_aeQR -> do
-              _asCurTick <- getTick
-              let as = AppState { _asLastEscPress = -1
-                                , _asFrameTimes   = BS.empty 120 -- Average over last N FPS
-                                , _asMode         = ModeJuliaAnimSmooth
-                                , _asFBScale      = 1
-                                , ..
-                                }
-                  ae = AppEnv { .. }
-               in runAppT as ae run
+          withQuadRenderer 16384 $ \_aeQR ->
+          withGPUFractal3D $ \_aeGPUFrac3D -> do
+            traceSystemInfo
+            _asCurTick <- getTick
+            let as = AppState { _asLastEscPress = -1
+                              , _asFrameTimes   = BS.empty 120 -- Average over last N FPS
+                              , _asMode         = ModeJuliaAnimSmooth
+                              , _asFBScale      = 1
+                              , ..
+                              }
+                ae = AppEnv { .. }
+             in runAppT as ae run
 

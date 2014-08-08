@@ -41,7 +41,7 @@ import Text.Printf
 import Trace
 import GLHelpers
 import Shaders
-import ShaderSource
+import QuadShaderSource
 import QuadTypes
 
 -- Module for efficient rendering of 2D quad primitives, used for UI elements and texture

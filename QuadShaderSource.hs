@@ -1,10 +1,10 @@
 
 {-# LANGUAGE QuasiQuotes #-}
 
-module ShaderSource ( vsSrcBasic
-                    , fsSrcBasic
-                    , fsColOnlySrcBasic
-                    ) where
+module QuadShaderSource ( vsSrcBasic
+                        , fsSrcBasic
+                        , fsColOnlySrcBasic
+                        ) where
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
