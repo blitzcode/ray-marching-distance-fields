@@ -122,11 +122,13 @@ drawIntoFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
                     -> (Int -> Int -> m a)
                     -> m (Maybe a)
 drawIntoFrameBuffer FrameBuffer { .. } f = do
+    oldVP <- liftIO $ GL.get GL.viewport
     control $ \run -> finally
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= fbFBO
              GL.textureBinding  GL.Texture2D   GL.$= Just fbTex
              (w, h) <- readIORef fbDim
              texImage2DNullPtr w h
+             setupViewport w h
              -- GL.framebufferStatus is unfortunately broken in OpenGL 2.9.2.0
              -- (see https://github.com/haskell-opengl/OpenGL/issues/51), so
              -- we're using the raw APIs as a backup
@@ -138,7 +140,9 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
                              (fromIntegral r :: Int)
                          run $ return Nothing
         )
-        ( GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject )
+        ( do GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
+             GL.viewport                       GL.$= oldVP
+        )
 
 -- Draw quad with frame buffer texture
 drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> Float -> Float -> Float -> Float -> IO ()
