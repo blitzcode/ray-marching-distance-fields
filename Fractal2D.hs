@@ -24,6 +24,8 @@ magnitudeSq c = realPart c * realPart c + imagPart c * imagPart c
 fractionalIterCnt :: Int -> Complex Float -> Float
 fractionalIterCnt iter escZ = max 0 $ fromIntegral iter - (log (log $ magnitudeSq escZ)) / log 2
 
+-- Mandelbrot Set
+--
 -- http://en.wikipedia.org/wiki/Mandelbrot_set#Computer_drawings
 mandelbrot :: Int -> Int -> VSM.IOVector Word32 -> Bool -> IO ()
 mandelbrot w h fb smooth =
@@ -66,6 +68,8 @@ makeSegments nseg low high =
         segl  = (range `div` nseg)
         end   = [(low + (nseg - 1) * segl, high - 1)]
 
+-- Julia Set, computed in parallel
+--
 -- http://en.wikipedia.org/wiki/Julia_set
 -- http://www.relativitybook.com/CoolStuff/julia_set.html
 juliaAnimated :: Int -> Int -> VSM.IOVector Word32 -> Bool -> Double -> IO ()
