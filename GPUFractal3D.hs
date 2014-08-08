@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module GPUFractal3D ( withGPUFractal3D
                     , GPUFractal3D

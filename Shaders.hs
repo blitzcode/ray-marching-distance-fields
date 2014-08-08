@@ -52,11 +52,11 @@ mkShaderProgram vsSrc fsSrc attribLocations =
                           GL.compileShader  shd
               success <- liftIO $ GL.get $ GL.compileStatus shd
               unless success $ do
-                  errLog <- liftIO $ GL.get $ GL.shaderInfoLog shd
+                  errLog <- liftIO . GL.get $ GL.shaderInfoLog shd
                   throwError errLog
           link prog = do
               liftIO $ GL.linkProgram prog
-              success <- liftIO $ GL.get $ GL.linkStatus prog
+              success <- liftIO . GL.get $ GL.linkStatus prog
               unless success $ do
                   errLog <- liftIO $ GL.get $ GL.programInfoLog prog
                   throwError errLog
@@ -64,8 +64,8 @@ mkShaderProgram vsSrc fsSrc attribLocations =
 -- Helper for mkShaderProgam, guaranteeing deallocation through ResourceT and
 -- reports errors through MonadError
 tryMkShaderResource :: (MonadError String m, MonadIO m, MonadResource m)
-            => IO (Either String GL.Program)
-            -> m GL.Program
+                    => IO (Either String GL.Program)
+                    -> m GL.Program
 tryMkShaderResource f =
     allocate f (GL.deleteObjectNames . rights . (: [])) >>= (either throwError return . snd)
 
