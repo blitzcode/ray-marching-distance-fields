@@ -40,7 +40,7 @@ withFrameBuffer fbWdh fbHgt f = do
   r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbPBO -> do
            GL.textureBinding GL.Texture2D GL.$= Just fbTex
-           setTextureFiltering TFNone
+           setTextureFiltering TFMagOnly
            GL.bindBuffer GL.PixelUnpackBuffer GL.$= Just fbPBO
            let fb = FrameBuffer { .. }
            allocPBO fb
@@ -93,11 +93,11 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
       GL.textureBinding GL.Texture2D GL.$= Nothing
     return r
 
-drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> IO ()
-drawFrameBuffer FrameBuffer { .. } qb =
+drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> Float -> Float -> Float -> Float -> IO ()
+drawFrameBuffer FrameBuffer { .. } qb x1 y1 x2 y2  =
     -- Draw full screen quad 
     drawQuad qb
-             0 0 (fromIntegral fbWdh) (fromIntegral fbHgt)
+             x1 y1 x2 y2
              10
              FCWhite
              TRNone

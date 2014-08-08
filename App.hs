@@ -90,12 +90,11 @@ processGLFWEvent ev =
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
                 _              -> return ()
-        GLFWEventWindowSize {- win -} _ w h -> do
-            -- TODO: Window resizing blocks event processing,
-            -- see https://github.com/glfw/glfw/issues/1
-            liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
         GLFWEventFramebufferSize {- win -} _ w h ->
             liftIO $ setupViewport w h
+        -- GLFWEventWindowSize {- win -} _ w h -> do
+        --     liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
+        --     return ()
         -- GLFWEventMouseButton win bttn st mk -> do
         --     return ()
         -- GLFWEventCursorPos win x y -> do
@@ -131,7 +130,7 @@ draw = do
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do
             -- Draw frame buffer contents
-            liftIO $ drawFrameBuffer _aeFB qb
+            liftIO $ drawFrameBuffer _aeFB qb 0 0 (fromIntegral w) (fromIntegral h)
             -- FPS counter and mode display
             ftStr <- updateAndReturnFrameTimes
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $

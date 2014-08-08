@@ -17,13 +17,8 @@ withWindow w h title tq =
              True <- GLFW.init
              -- GLFW.windowHint $ GLFW.WindowHint'Samples 4
              -- GLFW.windowHint $ GLFW.WindowHint'Decorated False
-             GLFW.windowHint $ GLFW.WindowHint'Resizable False
-             -- >2.1, no backwards compatibility on OS X
-             -- http://www.glfw.org/faq.html#how-do-i-create-an-opengl-30-context
-             GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
-             GLFW.windowHint $ GLFW.WindowHint'OpenGLForwardCompat True
-             GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
-             GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 2
+             GLFW.windowHint $ GLFW.WindowHint'Resizable True
+             modernOpenGL
              Just window <- GLFW.createWindow w h title Nothing Nothing
              registerCallbacks window tq
              GLFW.makeContextCurrent $ Just window
@@ -32,6 +27,15 @@ withWindow w h title tq =
         ( \window -> do GLFW.destroyWindow window
                         GLFW.terminate
         )
+
+-- >2.1, no backwards compatibility on OS X
+-- http://www.glfw.org/faq.html#how-do-i-create-an-opengl-30-context
+modernOpenGL :: IO ()
+modernOpenGL = do
+    GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
+    GLFW.windowHint $ GLFW.WindowHint'OpenGLForwardCompat True
+    GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
+    GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 2
 
 highDPIScaleFactor :: GLFW.Window -> IO Double
 highDPIScaleFactor win = do
