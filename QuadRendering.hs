@@ -81,6 +81,26 @@ bindAllocateDynamicBO bo target size = do
                                , GL.StreamDraw -- Dynamic
                                )
 
+setAttribArray :: GL.GLuint
+               -> Int
+               -> Int
+               -> Int
+               -> IO GL.AttribLocation
+setAttribArray idx attribStride vertexStride offset = do
+    -- Specify and enable vertex attribute array
+    let attrib = GL.AttribLocation idx
+        szf    = sizeOf (0 :: Float)
+    GL.vertexAttribPointer attrib GL.$=
+        ( GL.ToFloat
+        , GL.VertexArrayDescriptor
+              (fromIntegral attribStride)
+              GL.Float
+              (fromIntegral $ vertexStride * szf)
+              (nullPtr `plusPtr` (offset * szf))
+        )
+    GL.vertexAttribArray attrib GL.$= GL.Enabled
+    return attrib
+
 -- Initialize / clean up all OpenGL resources for our renderer
 withQuadRenderer :: Int -> (QuadRenderer -> IO a) -> IO a
 withQuadRenderer qrMaxQuad f =

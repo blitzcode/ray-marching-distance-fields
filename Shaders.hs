@@ -3,7 +3,6 @@
 
 module Shaders ( mkShaderProgram
                , tryMkShaderResource
-               , setAttribArray
                , setTextureShader
                , setOrtho2DProjMatrix
                ) where
@@ -16,8 +15,6 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Trans.Resource
-import Foreign.Ptr
-import Foreign.Storable
 import Foreign.Marshal.Array
 
 import GLHelpers
@@ -71,26 +68,6 @@ tryMkShaderResource :: (MonadError String m, MonadIO m, MonadResource m)
             -> m GL.Program
 tryMkShaderResource f =
     allocate f (GL.deleteObjectNames . rights . (: [])) >>= (either throwError return . snd)
-
-setAttribArray :: GL.GLuint
-               -> Int
-               -> Int
-               -> Int
-               -> IO GL.AttribLocation
-setAttribArray idx attribStride vertexStride offset = do
-    -- Specify and enable vertex attribute array
-    let attrib = GL.AttribLocation idx
-        szf    = sizeOf (0 :: Float)
-    GL.vertexAttribPointer attrib GL.$=
-        ( GL.ToFloat
-        , GL.VertexArrayDescriptor
-              (fromIntegral attribStride)
-              GL.Float
-              (fromIntegral $ vertexStride * szf)
-              (nullPtr `plusPtr` (offset * szf))
-        )
-    GL.vertexAttribArray attrib GL.$= GL.Enabled
-    return attrib
 
 setTextureShader :: GL.TextureObject -> Int -> GL.Program -> String -> IO ()
 setTextureShader tex tu prog uname = do
