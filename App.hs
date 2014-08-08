@@ -87,7 +87,7 @@ processGLFWEvent ev =
                 -- Also clear frame time history on mode switch
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
-                GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFBToPNG fb .
+                GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
                 GLFW.Key'L

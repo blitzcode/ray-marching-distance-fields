@@ -4,7 +4,7 @@
 module FrameBuffer ( withFrameBuffer
                    , fillFrameBuffer
                    , drawFrameBuffer
-                   , saveFBToPNG
+                   , saveFrameBufferToPNG
                    , resizeFrameBuffer
                    , getFrameBufferDim
                    , FrameBuffer
@@ -122,8 +122,8 @@ allocPBO FrameBuffer { .. } = do
                                              , GL.StreamDraw -- Dynamic
                                              )
 
-saveFBToPNG :: FrameBuffer -> FilePath -> IO ()
-saveFBToPNG FrameBuffer { .. } fn = do
+saveFrameBufferToPNG :: FrameBuffer -> FilePath -> IO ()
+saveFrameBufferToPNG FrameBuffer { .. } fn = do
     GL.textureBinding GL.Texture2D GL.$= Just fbTex
     (w, h) <- getCurTex2DSize
     img    <- VSM.new $ fbSizeB w h :: IO (VSM.IOVector JP.Pixel8)
