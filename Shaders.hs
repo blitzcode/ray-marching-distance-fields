@@ -1,5 +1,8 @@
 
+{-# LANGUAGE FlexibleContexts #-}
+
 module Shaders ( mkShaderProgram
+               , tryMkShaderResource
                , setAttribArray
                , setTextureShader
                , setOrtho2DProjMatrix
@@ -12,6 +15,7 @@ import Data.Either
 import Control.Exception
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Trans.Resource
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.Marshal.Array
@@ -59,6 +63,14 @@ mkShaderProgram vsSrc fsSrc attribLocations =
               unless success $ do
                   errLog <- liftIO $ GL.get $ GL.programInfoLog prog
                   throwError errLog
+
+-- Helper for mkShaderProgam, guaranteeing deallocation through ResourceT and
+-- reports errors through MonadError
+tryMkShaderResource :: (MonadError String m, MonadIO m, MonadResource m)
+            => IO (Either String GL.Program)
+            -> m GL.Program
+tryMkShaderResource f =
+    allocate f (GL.deleteObjectNames . rights . (: [])) >>= (either throwError return . snd)
 
 setAttribArray :: GL.GLuint
                -> Int
