@@ -148,7 +148,7 @@ draw = do
         ModeJuliaAnimSmooth  -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
         ModeMandelBrot       -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
         ModeMandelBrotSmooth -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
-        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D
+        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D w h
                                 --GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
                                 --GL.clear [GL.ColorBuffer, GL.DepthBuffer]
                                 --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
