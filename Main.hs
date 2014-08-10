@@ -51,7 +51,7 @@ main = do
           h = 512
        in withWindow w h "Fractal" _aeGLFWEventsQueue $ \_aeWindow ->
           withFontTexture $ \_aeFontTexture ->
-          withFrameBuffer w h $ \_aeFB ->
+          withFrameBuffer w h HighQualityDownscaling $ \_aeFB ->
           withQuadRenderer 16384 $ \_aeQR ->
           withGPUFractal3D $ \_aeGPUFrac3D -> do
             traceSystemInfo

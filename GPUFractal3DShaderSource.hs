@@ -47,6 +47,10 @@ import QQPlainText
 
 -- TODO: Implement proper orbiting camera model
 
+-- TODO: Image Based Lighting
+
+-- TODO: Maybe generate variations of the shader by running it through cpphs?
+
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
 vsSrcFSQuad = TE.encodeUtf8 . T.pack $ [plaintext|

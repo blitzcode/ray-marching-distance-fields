@@ -9,12 +9,14 @@ module FrameBuffer ( withFrameBuffer
                    , getFrameBufferDim
                    , drawIntoFrameBuffer
                    , FrameBuffer
+                   , Downscaling(..)
                    ) where
 
+import Control.Monad
+import Control.Applicative
 import Control.Exception
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
-import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
 import Data.Word
@@ -34,21 +36,27 @@ import Trace
 -- Simple 'frame buffer' interface where we can directly write into an RGBA8 vector and have
 -- it appear on screen. Uses PBOs to allow writes to a texture drawn as a full screen quad
 
-data FrameBuffer = FrameBuffer { fbTex :: !GL.TextureObject
-                               , fbPBO :: !GL.BufferObject
-                               , fbDim :: IORef (Int, Int)
-                               , fbFBO :: !GL.FramebufferObject
+data FrameBuffer = FrameBuffer { fbTex         :: !GL.TextureObject
+                               , fbPBO         :: !GL.BufferObject
+                               , fbDim         :: IORef (Int, Int)
+                               , fbFBO         :: !GL.FramebufferObject
+                               , fbDownscaling :: !Downscaling
                                }
 
-withFrameBuffer :: Int -> Int -> (FrameBuffer -> IO a) -> IO a
-withFrameBuffer w h f = do
+data Downscaling = HighQualityDownscaling | LowQualityDownscaling
+                   deriving (Show, Eq)
+
+withFrameBuffer :: Int -> Int -> Downscaling -> (FrameBuffer -> IO a) -> IO a
+withFrameBuffer w h fbDownscaling f = do
     traceOnGLError $ Just "withFrameBuffer begin"
     r <- bracket GL.genObjectName GL.deleteObjectName $ \fbTex ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbPBO ->
          bracket GL.genObjectName GL.deleteObjectName $ \fbFBO -> do
              -- Setup texture
              GL.textureBinding GL.Texture2D GL.$= Just fbTex
-             setTextureFiltering TFMagOnly -- Otherwise we'd need to use automatic MIP-map gen.
+             setTextureFiltering $ if   fbDownscaling == HighQualityDownscaling
+                                   then TFMinMag -- Need to generate MIP-maps after every change
+                                   else TFMagOnly
              setTextureClampST -- No wrap-around artifacts at the FB borders
              -- Setup FBO
              GL.bindFramebuffer GL.Framebuffer GL.$= fbFBO
@@ -99,6 +107,8 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
       -- Update frame buffer texture from the PBO data
       GL.textureBinding GL.Texture2D GL.$= Just fbTex
       texImage2DNullPtr w h
+      when (fbDownscaling == HighQualityDownscaling) $
+          GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
       -- Done
       GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
       GL.textureBinding GL.Texture2D GL.$= Nothing
@@ -142,6 +152,9 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
         )
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
              GL.viewport                       GL.$= oldVP
+             when (fbDownscaling == HighQualityDownscaling) $ do
+                 GL.textureBinding GL.Texture2D GL.$= Just fbTex
+                 GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
         )
 
 -- Draw quad with frame buffer texture
