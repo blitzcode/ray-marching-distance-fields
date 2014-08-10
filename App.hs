@@ -153,7 +153,7 @@ draw = do
         ModeJuliaAnimSmooth  -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
         ModeMandelBrot       -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
         ModeMandelBrotSmooth -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
-        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D w h
+        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D w h _asCurTick
                                 --GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
                                 --GL.clear [GL.ColorBuffer, GL.DepthBuffer]
                                 --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
@@ -166,7 +166,7 @@ draw = do
             -- FPS counter and mode display
             ftStr <- updateAndReturnFrameTimes
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
-            liftIO . drawText _aeFontTexture qb 3 (h - 12) 0x0000FF00 $
+            liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
                 printf ( "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n" ++
                          "FB Sca[l]e: %fx, Dim %ix%i | %s"
                        )
@@ -194,10 +194,10 @@ updateAndReturnFrameTimes = do
                         (1.0 / fdWorst)
                         (1.0 / fdBest )
 
--- drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
--- drawTextWithShadow tex qb x y str = do
---     drawText tex qb (x + 1) (y - 1) 0x007F7F7F str
---     drawText tex qb  x       y      0x0000FF00 str
+drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
+drawTextWithShadow tex qb x y str = do
+    drawText tex qb (x + 1) (y - 1) 0x00000000 str
+    drawText tex qb  x       y      0x0000FF00 str
 
 run :: AppIO ()
 run = do

@@ -29,7 +29,9 @@ import QQPlainText
 --
 -- http://blog.hvidtfeldts.net/index.php/2012/05/distance-estimated-3d-fractals-part-viii-epilogue/
 --
--- http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+-- http://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+--
+-- http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm
 --
 -- http://www.iquilezles.org/www/material/nvscene2008/rwwtt.pdf
 --
@@ -67,6 +69,7 @@ fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
 
 #version 330 core
 in vec2 fs_uv;
+uniform float in_time;
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
@@ -93,22 +96,47 @@ float de_mandelbulb(vec3 pos)
     // http://blog.hvidtfeldts.net/index.php/2011/09/
     // distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 
-    const float power      = 8.0;
+    float power            = 8;//mod(in_time, 5) + 2;
     const float bailout    = 4;
-    const int   iterations = 100;
+    const int   iterations = 150;
 
-    vec3  z  = pos;
+    vec3  w  = pos;
     float dr = 1.0;
     float r  = 0.0;
     for (int i=0; i<iterations; i++)
+    {
+        r = length(w);
+        if (r > bailout)
+            break;
+
+        dr = pow(r, power - 1.0) * power * dr + 1.0;
+
+        float x = w.x; float x2 = x*x; float x4 = x2*x2;
+        float y = w.y; float y2 = y*y; float y4 = y2*y2;
+        float z = w.z; float z2 = z*z; float z4 = z2*z2;
+
+        float k3 = x2 + z2;
+        float k2 = inversesqrt( k3*k3*k3*k3*k3*k3*k3 );
+        float k1 = x4 + y4 + z4 - 6.0*y2*z2 - 6.0*x2*y2 + 2.0*z2*x2;
+        float k4 = x2 - y2 + z2;
+
+        w.x =  64.0*x*y*z*(x2-z2)*k4*(x4-6.0*x2*z2+z4)*k1*k2;
+        w.y = -16.0*y2*k3*k4*k4 + k1*k1;
+        w.z = -8.0*y*k4*(x4*x4 - 28.0*x4*x2*z2 + 70.0*x4*z4 - 28.0*x2*z2*z4 + z4*z4)*k1*k2;
+
+        w += pos;
+    }
+    /*
     {
         r = length(z);
         if (r > bailout)
             break;
 
         // Convert to polar coordinates
-        float theta = acos(z.z / r);
-        float phi   = atan(z.y, z.x);
+        //float theta = acos(z.z / r);
+        //float phi   = atan(z.y, z.x);
+        float theta = acos(z.y / r);
+        float phi   = atan(z.x, z.z);
         dr          = pow(r, power - 1.0) * power * dr + 1.0;
 
         // Scale and rotate the point
@@ -117,9 +145,11 @@ float de_mandelbulb(vec3 pos)
         phi      = phi * power;
 
         // Convert back to cartesian coordinates
-        z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        //z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        z = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
         z += pos;
     }
+    */
 
     return 0.5 * log(r) * r / dr;
 }
@@ -189,13 +219,13 @@ void main()
     {
         // Compute intersection and normal
         vec3 isec_pos = origin + dir * t;
-        vec3 isec_n = normal(isec_pos - dir * 0.0001);
+        vec3 isec_n   = normal(isec_pos - dir * 0.0001);
 
         // Gamma correct and output
-        vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
-        /*vec3 color = ( vec3(max(0, dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.5,0.5) +
-                       vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.5,0.5,1.0)
-                     ) * pow(step_gradient, 1);*/
+        //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
+        vec3 color = ( vec3(max(0, dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
+                       vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
+                     ) * pow(step_gradient, 3);
         vec3 gamma = pow(color, vec3(1.0 / 2.2));
         frag_color = vec4(gamma, 1);
     }
