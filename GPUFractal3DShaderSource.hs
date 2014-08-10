@@ -37,6 +37,16 @@ import QQPlainText
 --
 -- https://www.shadertoy.com/view/MdfGRr
 
+-- TODO: Need to add some form of near plane clipping
+
+-- TODO: Better AO based on distance estimation along the surface normal
+
+-- TODO: Coloring with orbit traps
+
+-- TODO: Have a maxT parameter to abort marching
+
+-- TODO: Implement proper orbiting camera model
+
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
 vsSrcFSQuad = TE.encodeUtf8 . T.pack $ [plaintext|
@@ -93,17 +103,15 @@ float de_rounded_box(vec3 pos)
 
 float de_mandelbulb(vec3 pos)
 {
-    // http://blog.hvidtfeldts.net/index.php/2011/09/
-    // distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
-
-    float power            = 8;//mod(in_time, 5) + 2;
+    float power            = mod(in_time, 5) + 2;
     const float bailout    = 4;
     const int   iterations = 150;
 
-    vec3  w  = pos;
+    vec3  z  = pos;
     float dr = 1.0;
     float r  = 0.0;
     for (int i=0; i<iterations; i++)
+    /*
     {
         r = length(w);
         if (r > bailout)
@@ -126,7 +134,7 @@ float de_mandelbulb(vec3 pos)
 
         w += pos;
     }
-    /*
+    */
     {
         r = length(z);
         if (r > bailout)
@@ -149,7 +157,6 @@ float de_mandelbulb(vec3 pos)
         z = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
         z += pos;
     }
-    */
 
     return 0.5 * log(r) * r / dr;
 }
@@ -170,7 +177,7 @@ float distance_estimator(vec3 pos)
 vec3 normal(vec3 pos)
 {
     // Central difference based normal
-    const float eps = 0.00001;
+    const float eps = 0.000001;
     const vec3 epsX = vec3(eps, 0.0, 0.0);
     const vec3 epsY = vec3(0.0, eps, 0.0);
     const vec3 epsZ = vec3(0.0, 0.0, eps);
@@ -203,10 +210,26 @@ vec3 ray_march(vec3 origin, vec3 dir)
         );
 }
 
+vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
+{
+    vec3  warm_col  = vec3(0.9 , 0.9 , 0.7);
+    vec3  cool_col  = vec3(0.07, 0.07, 0.1);
+    float diff_warm = 0.25;
+    float diff_cool = 0.15;
+
+    float ndotl     = (dot(light, n) + 1.0) * 0.5;
+
+    vec3  kcool     = min((cool_col + diff_cool) * surface_col, 1.0);
+    vec3  kwarm     = min((warm_col + diff_warm) * surface_col, 1.0);
+    vec3  kfinal    = mix(kcool, kwarm, ndotl);
+
+    return min(kfinal, 1.0);
+}
+
 void main()
 {
     // Transform ray
-    vec3 origin = vec3(fs_uv, 1.1);
+    vec3 origin = vec3(fs_uv, 3.0);
     vec3 dir    = vec3(0.0, 0.0, -1.0);
 
     // Ray march
@@ -215,17 +238,18 @@ void main()
     float last_dist     = r.y;
     float step_gradient = r.z;
 
-    if (last_dist < 0.01)
+    if (last_dist < 0.1)
     {
         // Compute intersection and normal
         vec3 isec_pos = origin + dir * t;
-        vec3 isec_n   = normal(isec_pos - dir * 0.0001);
+        vec3 isec_n   = normal(isec_pos - dir * 0.00001);
 
         // Gamma correct and output
         //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
-        vec3 color = ( vec3(max(0, dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
+        /*vec3 color = ( vec3(max(0, dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
                        vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
-                     ) * pow(step_gradient, 3);
+                     ) * pow(step_gradient, 3);*/
+        vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
         vec3 gamma = pow(color, vec3(1.0 / 2.2));
         frag_color = vec4(gamma, 1);
     }
