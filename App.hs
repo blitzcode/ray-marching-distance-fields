@@ -10,6 +10,7 @@ module App ( AppState(..)
              -- Export to silence warnings
            , aeFontTexture
            , aeQR
+           , aeGPUFrac3D
            ) where
 
 import Control.Lens
@@ -90,15 +91,19 @@ processGLFWEvent ev =
                     when (tick - lastPress < 0.5) .
                         liftIO $ GLFW.setWindowShouldClose win True
                     asLastEscPress .= tick
-                -- Also clear frame time history on mode switch
+                -- Also clear frame time history on mode / scaling switch
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
+                GLFW.Key'L
+                    | GLFW.modifierKeysShift mk -> do asFBScale %= min 4     . (* 2)
+                                                      asFrameTimes %= BS.clear
+                                                      resize
+                    | otherwise                 -> do asFBScale %= max 0.125 . (/ 2)
+                                                      asFrameTimes %= BS.clear
+                                                      resize
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
-                GLFW.Key'L
-                    | GLFW.modifierKeysShift mk -> asFBScale %= min 4     . (* 2) >> resize
-                    | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
                 _              -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
