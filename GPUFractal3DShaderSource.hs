@@ -38,18 +38,19 @@ import QQPlainText
 -- https://www.shadertoy.com/view/MdfGRr
 
 -- TODO: Need to add some form of near plane clipping
-
--- TODO: Better AO based on distance estimation along the surface normal
-
--- TODO: Coloring with orbit traps
-
 -- TODO: Have a maxT parameter to abort marching
-
+-- TODO: Bounding sphere for fast rejection
+-- TODO: Better AO based on distance estimation along the surface normal
+-- TODO: Coloring with orbit traps
 -- TODO: Implement proper orbiting camera model
-
--- TODO: Image Based Lighting
-
+-- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
+-- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
 -- TODO: Maybe generate variations of the shader by running it through cpphs?
+-- TODO: Separate shader entry points for distance field tests, arbitrary power code and
+--       transcendental free power 8 code, SoftLamFakeAO and IBL
+-- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
+-- TODO: Make upscaled rendering the default, key to switch to tiled high quality rendering
+-- TODO: See if we can maybe integrate AntTweakBar or similar
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
