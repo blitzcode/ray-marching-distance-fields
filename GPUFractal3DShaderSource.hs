@@ -39,6 +39,9 @@ import QQPlainText
 
 -- TODO: Need to add some form of near plane clipping
 -- TODO: Have a maxT parameter to abort marching
+-- TODO: Implement perspective camera
+-- TODO: Move transformations into vertex shader, like here:
+--       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
 -- TODO: Bounding sphere for fast rejection
 -- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: Coloring with orbit traps
@@ -50,6 +53,9 @@ import QQPlainText
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
 -- TODO: Make upscaled rendering the default, key to switch to tiled high quality rendering
 -- TODO: See if we can maybe integrate AntTweakBar or similar
+-- TODO: Mouse control for orbiting camera
+-- TODO: Adjust ray marching MIN_DIST based screen projection, like in
+--       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
@@ -70,6 +76,7 @@ void main()
 |]
 
 fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
+
 
 
 #version 330 core
@@ -98,7 +105,10 @@ float de_rounded_box(vec3 pos, vec3 box)
 
 float de_mandelbulb(vec3 pos)
 {
-    float power            = mod(in_time, 5) + 2;
+    float pow_offs = mod(in_time, 10);
+    if (pow_offs > 5)
+        pow_offs = 10 - pow_offs;
+    float power            = 8;//pow_offs + 2;
     const float bailout    = 4;
     const int   iterations = 100;
 
@@ -106,7 +116,6 @@ float de_mandelbulb(vec3 pos)
     float dr = 1.0;
     float r  = 0.0;
     for (int i=0; i<iterations; i++)
-    /*
     {
         r = length(w);
         if (r > bailout)
@@ -129,7 +138,7 @@ float de_mandelbulb(vec3 pos)
 
         w += pos;
     }
-    */
+    /*
     {
         r = length(w);
         if (r > bailout)
@@ -152,6 +161,7 @@ float de_mandelbulb(vec3 pos)
         w = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
         w += pos;
     }
+    */
 
     return 0.5 * log(r) * r / dr;
 }
@@ -187,14 +197,19 @@ vec3 normal(vec3 pos)
                           distance_estimator(pos + epsZ) - distance_estimator(pos - epsZ)));
 }
 
-vec3 ray_march(vec3 origin, vec3 dir)
+void ray_march( vec3 origin
+              , vec3 dir
+              , out float dist_sum      // T along the ray
+              , out float dist          // Last distance (to see if we got close to anything)
+              , out float step_gradient // Step based gradient (for cheap fake AO)
+              )
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
 
     const int   MAX_STEPS = 64;
     const float MIN_DIST  = 0.001;
 
-    float dist_sum = 0.0, dist;
+    dist_sum = 0.0;
     int steps = 0;
     for (steps=0; steps<MAX_STEPS; steps++)
     {
@@ -204,11 +219,8 @@ vec3 ray_march(vec3 origin, vec3 dir)
         if (dist < MIN_DIST)
             break;
     }
-    return vec3
-        ( dist_sum                              // T along the ray
-        , dist                                  // Last distance (to see if we got close to anything)
-        , 1.0 - float(steps) / float(MAX_STEPS) // Step based gradient (for cheap fake AO)
-        );
+
+    step_gradient = 1.0 - float(steps) / float(MAX_STEPS);
 }
 
 vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
@@ -256,10 +268,11 @@ void main()
     float height = 2 / aspect;
     mat4x4 unproj = unproj_ortho(2, height);
 
+    // Orbit camera
     vec3 cam_pos;
-    cam_pos.x = sin(in_time / 3.0) * 1.1;
-    cam_pos.z = cos(in_time / 3.1) * 1.1;
-    cam_pos.y = cos(in_time / 3.2) * 1.1;
+    cam_pos.x = sin(in_time / 3.0) * 2;
+    cam_pos.z = cos(in_time / 3.1) * 2;
+    cam_pos.y = cos(in_time / 3.2) * 2;
 
     // Camera transform. Look at center, orbit around it
     mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
@@ -269,16 +282,16 @@ void main()
     vec3 dir    = (camera *          vec4(0.0, 0.0, 1.0, 0.0)).xyz;
 
     // Ray march
-    vec3  r             = ray_march(origin, dir);
-    float t             = r.x;
-    float last_dist     = r.y;
-    float step_gradient = r.z;
+    float t, last_dist, step_gradient;
+    ray_march(origin, dir, t, last_dist, step_gradient);
 
     if (last_dist < 0.1)
     {
-        // Compute intersection and normal
+        // Compute intersection
         vec3 isec_pos = origin + dir * t;
-        vec3 isec_n   = normal(isec_pos - dir * 0.00001);
+
+        // Step back from the surface a bit before computing the normal
+        vec3 isec_n = normal(isec_pos - dir * 0.00001);
 
         // Gamma correct and output
         //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
