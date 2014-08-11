@@ -42,7 +42,6 @@ import QQPlainText
 -- TODO: Bounding sphere for fast rejection
 -- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: Coloring with orbit traps
--- TODO: Implement proper orbiting camera model
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
 -- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
 -- TODO: Maybe generate variations of the shader by running it through cpphs?
@@ -58,33 +57,27 @@ vsSrcFSQuad = TE.encodeUtf8 . T.pack $ [plaintext|
 
 #version 330 core
 
-uniform float in_aspect;
-out vec2 fs_uv;
 const vec2 quad_vtx[4] = vec2[4] ( vec2(-1.0, -1.0)
                                  , vec2( 1.0, -1.0)
                                  , vec2(-1.0,  1.0)
                                  , vec2( 1.0,  1.0)
                                  );
-float view_height = 1.0 / in_aspect;
-float scale = 1.0f;
-vec2 quad_uv[4] = vec2[4] ( vec2(-1.0 * scale, -view_height * scale)
-                          , vec2( 1.0 * scale, -view_height * scale)
-                          , vec2(-1.0 * scale,  view_height * scale)
-                          , vec2( 1.0 * scale,  view_height * scale)
-                          );
 void main()
 {
     gl_Position = vec4(quad_vtx[gl_VertexID], 0.0, 1.0);
-    fs_uv       = quad_uv[gl_VertexID];
 }
 
 |]
 
 fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
 
+
 #version 330 core
-in vec2 fs_uv;
+
 uniform float in_time;
+uniform float in_screen_wdh;
+uniform float in_screen_hgt;
+
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
@@ -92,16 +85,13 @@ float de_sphere(vec3 pos)
 {
     return max(0.0, length(pos) - 0.3);
 }
-float de_torus(vec3 pos)
+float de_torus(vec3 pos, float torus_size, float torus_r)
 {
-    float torus_size = 0.8;
-    float torus_r = 0.2;
     vec2 q = vec2(length(pos.xy) - torus_size, pos.z);
     return length(q) - torus_r;
 }
-float de_rounded_box(vec3 pos)
+float de_rounded_box(vec3 pos, vec3 box)
 {
-    vec3 box = vec3(0.1, 0.1, 0.85);
     float r = 0.05;
     return length(max(abs(pos) - box, 0.0)) - r;
 }
@@ -110,9 +100,9 @@ float de_mandelbulb(vec3 pos)
 {
     float power            = mod(in_time, 5) + 2;
     const float bailout    = 4;
-    const int   iterations = 150;
+    const int   iterations = 100;
 
-    vec3  z  = pos;
+    vec3  w  = pos;
     float dr = 1.0;
     float r  = 0.0;
     for (int i=0; i<iterations; i++)
@@ -141,15 +131,15 @@ float de_mandelbulb(vec3 pos)
     }
     */
     {
-        r = length(z);
+        r = length(w);
         if (r > bailout)
             break;
 
         // Convert to polar coordinates
-        //float theta = acos(z.z / r);
-        //float phi   = atan(z.y, z.x);
-        float theta = acos(z.y / r);
-        float phi   = atan(z.x, z.z);
+        //float theta = acos(w.z / r);
+        //float phi   = atan(w.y, w.x);
+        float theta = acos(w.y / r);
+        float phi   = atan(w.x, w.z);
         dr          = pow(r, power - 1.0) * power * dr + 1.0;
 
         // Scale and rotate the point
@@ -158,9 +148,9 @@ float de_mandelbulb(vec3 pos)
         phi      = phi * power;
 
         // Convert back to cartesian coordinates
-        //z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
-        z = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
-        z += pos;
+        //w = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        w = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
+        w += pos;
     }
 
     return 0.5 * log(r) * r / dr;
@@ -175,7 +165,13 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-    // return smin(de_rounded_box(pos), smin(de_sphere(pos), de_torus(pos), 32), 32);
+    /*
+    return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05)),
+             smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85)),
+               smin(de_sphere(pos),
+                 de_torus(pos, 0.8, 0.2),
+                   32), 32), 64);
+    */
     return de_mandelbulb(pos);
 }
 
@@ -195,8 +191,8 @@ vec3 ray_march(vec3 origin, vec3 dir)
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
 
-    const int MAX_STEPS = 64;
-    const float MIN_DIST = 0.001;
+    const int   MAX_STEPS = 64;
+    const float MIN_DIST  = 0.001;
 
     float dist_sum = 0.0, dist;
     int steps = 0;
@@ -231,11 +227,46 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
     return min(kfinal, 1.0);
 }
 
+mat4x4 unproj_ortho(float width, float height)
+{
+    return mat4x4(width / 2.0, 0.0         , 0.0, 0.0,
+                  0.0        , height / 2.0, 0.0, 0.0,
+                  0.0        , 0.0         , 1.0, 0.0,
+                  0.0        , 0.0         , 0.0, 1.0);
+}
+
+mat4x4 lookat(vec3 eye, vec3 focus, vec3 up)
+{
+    vec3 zaxis = normalize(focus - eye);
+    vec3 xaxis = normalize(cross(zaxis, up));
+    vec3 yaxis = cross(xaxis, zaxis);
+    return mat4x4(xaxis.x, xaxis.y, xaxis.z, 0.0,
+                  yaxis.x, yaxis.y, yaxis.z, 0.0,
+                  zaxis.x, zaxis.y, zaxis.z, 0.0,
+                  eye.x  , eye.y  , eye.z  , 1.0);
+}
+
 void main()
 {
+    // Convert fragment coordinates to NDC [-1, 1]
+    vec2 ndc = vec2(gl_FragCoord.x / in_screen_wdh, gl_FragCoord.y / in_screen_hgt) * 2.0 - 1.0;
+
+    // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
+    float aspect = in_screen_wdh / in_screen_hgt;
+    float height = 2 / aspect;
+    mat4x4 unproj = unproj_ortho(2, height);
+
+    vec3 cam_pos;
+    cam_pos.x = sin(in_time / 3.0) * 1.1;
+    cam_pos.z = cos(in_time / 3.1) * 1.1;
+    cam_pos.y = cos(in_time / 3.2) * 1.1;
+
+    // Camera transform. Look at center, orbit around it
+    mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
+
     // Transform ray
-    vec3 origin = vec3(fs_uv, 3.0);
-    vec3 dir    = vec3(0.0, 0.0, -1.0);
+    vec3 origin = (camera * unproj * vec4(ndc, 0.0, 1.0)     ).xyz;
+    vec3 dir    = (camera *          vec4(0.0, 0.0, 1.0, 0.0)).xyz;
 
     // Ray march
     vec3  r             = ray_march(origin, dir);

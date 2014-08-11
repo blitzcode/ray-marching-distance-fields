@@ -155,6 +155,7 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
              when (fbDownscaling == HighQualityDownscaling) $ do
                  GL.textureBinding GL.Texture2D GL.$= Just fbTex
                  GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
+                 GL.textureBinding GL.Texture2D GL.$= Nothing
         )
 
 -- Draw quad with frame buffer texture

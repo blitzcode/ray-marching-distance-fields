@@ -45,8 +45,9 @@ drawGPUFractal3D GPUFractal3D { .. } w h time = do
     let uniformFloat nm val =
             GL.get (GL.uniformLocation gfTestShd nm) >>= \(GL.UniformLocation loc) ->
                 GLR.glUniform1f loc val
-     in do uniformFloat "in_aspect" $ fromIntegral w / fromIntegral h
-           uniformFloat "in_time"   $ realToFrac time
+     in do uniformFloat "in_screen_wdh" $ fromIntegral w
+           uniformFloat "in_screen_hgt" $ fromIntegral h
+           uniformFloat "in_time"       $ realToFrac time
     -- Draw fullscreen quad. Don't need any VBO etc, the vertex shader will make this a
     -- proper quad. Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)
