@@ -1,15 +1,17 @@
 
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
 
 module GPUFractal3D ( withGPUFractal3D
                     , GPUFractal3D
                     , drawGPUFractal3D
                     ) where
 
+import Control.Exception
 import Control.Monad.Trans
 import Control.Monad.Except
 import Control.Monad.Trans.Resource
 import Text.Printf
+import qualified Data.ByteString as B
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
 
@@ -26,8 +28,11 @@ withGPUFractal3D :: (GPUFractal3D -> IO a) -> IO a
 withGPUFractal3D f = do
     -- Create, compile and link shaders
     r <- runExceptT . runResourceT $ do
-             gfVAO     <- genObjectNameResource
-             gfTestShd <- tryMkShaderResource $ mkShaderProgram vsSrcFSQuad fsSrcBasic []
+             gfVAO <- genObjectNameResource
+             -- Build-in fragment shader can be overridden with a file
+             fsSrc <- either (\(_ :: IOException) -> return fsSrcBasic) return
+                 =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
+             gfTestShd <- tryMkShaderResource $ mkShaderProgram vsSrcFSQuad fsSrc []
              liftIO $ f GPUFractal3D { .. }
     either (traceAndThrow . printf "withGPUFractal3D - Shader init failed:\n%s") return r
 
