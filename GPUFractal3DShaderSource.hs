@@ -42,7 +42,6 @@ import QQPlainText
 -- TODO: Implement perspective camera
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
--- TODO: Bounding sphere for fast rejection
 -- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: Coloring with orbit traps
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
@@ -54,8 +53,8 @@ import QQPlainText
 -- TODO: Make upscaled rendering the default, key to switch to tiled high quality rendering
 -- TODO: See if we can maybe integrate AntTweakBar or similar
 -- TODO: Mouse control for orbiting camera
--- TODO: Adjust ray marching MIN_DIST based screen projection, like in
---       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
+-- TODO: Adjust ray marching MIN_DIST and FD normal epsilon based screen projection, like in
+--       https://www.shadertoy.com/view/MdfGRr
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
@@ -77,8 +76,6 @@ void main()
 
 fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
 
-
-
 #version 330 core
 
 uniform float in_time;
@@ -88,27 +85,33 @@ uniform float in_screen_hgt;
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
-float de_sphere(vec3 pos)
+float de_sphere(vec3 pos, float r)
 {
-    return max(0.0, length(pos) - 0.3);
+    return max(0.0, length(pos) - r);
 }
 float de_torus(vec3 pos, float torus_size, float torus_r)
 {
     vec2 q = vec2(length(pos.xy) - torus_size, pos.z);
     return length(q) - torus_r;
 }
-float de_rounded_box(vec3 pos, vec3 box)
+float de_rounded_box(vec3 pos, vec3 box, float r)
 {
-    float r = 0.05;
     return length(max(abs(pos) - box, 0.0)) - r;
 }
+
+#define POWER8
 
 float de_mandelbulb(vec3 pos)
 {
     float pow_offs = mod(in_time, 10);
     if (pow_offs > 5)
         pow_offs = 10 - pow_offs;
-    float power            = 8;//pow_offs + 2;
+    float power            =
+#ifdef POWER8
+        8;
+#else
+        pow_offs + 2;
+#endif
     const float bailout    = 4;
     const int   iterations = 100;
 
@@ -117,6 +120,7 @@ float de_mandelbulb(vec3 pos)
     float r  = 0.0;
     for (int i=0; i<iterations; i++)
     {
+#ifdef POWER8
         r = length(w);
         if (r > bailout)
             break;
@@ -137,16 +141,14 @@ float de_mandelbulb(vec3 pos)
         w.z = -8.0*y*k4*(x4*x4 - 28.0*x4*x2*z2 + 70.0*x4*z4 - 28.0*x2*z2*z4 + z4*z4)*k1*k2;
 
         w += pos;
-    }
-    /*
-    {
+#else
         r = length(w);
         if (r > bailout)
             break;
 
         // Convert to polar coordinates
-        //float theta = acos(w.z / r);
-        //float phi   = atan(w.y, w.x);
+        // float theta = acos(w.z / r);
+        // float phi   = atan(w.y, w.x);
         float theta = acos(w.y / r);
         float phi   = atan(w.x, w.z);
         dr          = pow(r, power - 1.0) * power * dr + 1.0;
@@ -157,11 +159,11 @@ float de_mandelbulb(vec3 pos)
         phi      = phi * power;
 
         // Convert back to cartesian coordinates
-        //w = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        // w = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
         w = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
         w += pos;
+#endif
     }
-    */
 
     return 0.5 * log(r) * r / dr;
 }
@@ -175,14 +177,15 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-    /*
-    return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05)),
-             smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85)),
-               smin(de_sphere(pos),
+#if 1
+    return de_mandelbulb(pos);
+#else
+    return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
+             smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
+               smin(de_sphere(pos, 0.3),
                  de_torus(pos, 0.8, 0.2),
                    32), 32), 64);
-    */
-    return de_mandelbulb(pos);
+#endif
 }
 
 vec3 normal(vec3 pos)
@@ -197,9 +200,29 @@ vec3 normal(vec3 pos)
                           distance_estimator(pos + epsZ) - distance_estimator(pos - epsZ)));
 }
 
+bool ray_sphere( vec3 origin
+               , vec3 dir
+               , vec3 spherePos
+               , float sphereR
+               , out float tmin
+               , out float tmax
+               )
+{
+    vec3 rs  = spherePos - origin;
+    float t  = dot(dir, rs);
+    float a  = dot(rs, rs) - t * t;
+    float r2 = sphereR * sphereR;
+    if (a > r2)
+        return false;
+    float h = sqrt(r2 - a);
+    tmin = t - h;
+    tmax = t + h;
+    return true;
+}
+
 void ray_march( vec3 origin
               , vec3 dir
-              , out float dist_sum      // T along the ray
+              , out float t             // T along the ray
               , out float dist          // Last distance (to see if we got close to anything)
               , out float step_gradient // Step based gradient (for cheap fake AO)
               )
@@ -209,14 +232,21 @@ void ray_march( vec3 origin
     const int   MAX_STEPS = 64;
     const float MIN_DIST  = 0.001;
 
-    dist_sum = 0.0;
+    // First intersect with a bounding sphere. Helps quickly reject rays which can't
+    // possibly intersect with the scene and helps by bringing our starting point closer
+    // to the surface (DEs get very imprecise when we're starting to far away)
+    float tspheremin, tspheremax;
+    if (!ray_sphere(origin, dir, vec3(0,0,0), 1.25, tspheremin, tspheremax))
+        return;
+
+    t = tspheremin;
     int steps = 0;
     for (steps=0; steps<MAX_STEPS; steps++)
     {
-        vec3 pos = origin + dist_sum * dir;
+        vec3 pos = origin + t * dir;
         dist = distance_estimator(pos);
-        dist_sum += dist;
-        if (dist < MIN_DIST)
+        t += dist;
+        if (dist < MIN_DIST/* || dist > tspheremax*/)
             break;
     }
 
@@ -239,6 +269,7 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
     return min(kfinal, 1.0);
 }
 
+// NDC to camera space
 mat4x4 unproj_ortho(float width, float height)
 {
     return mat4x4(width / 2.0, 0.0         , 0.0, 0.0,
@@ -265,14 +296,15 @@ void main()
 
     // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
     float aspect = in_screen_wdh / in_screen_hgt;
-    float height = 2 / aspect;
-    mat4x4 unproj = unproj_ortho(2, height);
+    float width  = 2;
+    float height = width / aspect;
+    mat4x4 unproj = unproj_ortho(width, height);
 
     // Orbit camera
     vec3 cam_pos;
     cam_pos.x = sin(in_time / 3.0) * 2;
-    cam_pos.z = cos(in_time / 3.1) * 2;
-    cam_pos.y = cos(in_time / 3.2) * 2;
+    cam_pos.z = cos(in_time / 3.0) * 2;
+    cam_pos.y = cos(in_time / 4.0) * 2;
 
     // Camera transform. Look at center, orbit around it
     mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
@@ -293,12 +325,14 @@ void main()
         // Step back from the surface a bit before computing the normal
         vec3 isec_n = normal(isec_pos - dir * 0.00001);
 
-        // Gamma correct and output
+        // Shading
         //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
         /*vec3 color = ( vec3(max(0, dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
                        vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
                      ) * pow(step_gradient, 3);*/
         vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
+
+        // Gamma correct and output
         vec3 gamma = pow(color, vec3(1.0 / 2.2));
         frag_color = vec4(gamma, 1);
     }
