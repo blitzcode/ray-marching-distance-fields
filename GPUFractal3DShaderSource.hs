@@ -43,7 +43,6 @@ import QQPlainText
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
 -- TODO: Better AO based on distance estimation along the surface normal
--- TODO: Coloring with orbit traps
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
 -- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
 -- TODO: Maybe generate variations of the shader by running it through cpphs?
@@ -55,6 +54,9 @@ import QQPlainText
 -- TODO: Mouse control for orbiting camera
 -- TODO: Adjust ray marching MIN_DIST and FD normal epsilon based screen projection, like in
 --       https://www.shadertoy.com/view/MdfGRr
+-- TODO: Understand and try our some of the other DE methods from
+--       http://blog.hvidtfeldts.net/index.php/2011/09/
+--           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
@@ -73,8 +75,6 @@ void main()
 }
 
 |]
-
-fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
 
 #version 330 core
 
@@ -118,14 +118,14 @@ float de_mandelbulb(vec3 pos)
     vec3  w  = pos;
     float dr = 1.0;
     float r  = 0.0;
+    // vec3 trap = abs(w);
     for (int i=0; i<iterations; i++)
     {
-#ifdef POWER8
         r = length(w);
         if (r > bailout)
             break;
-
-        dr = pow(r, power - 1.0) * power * dr + 1.0;
+#ifdef POWER8
+        // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm 
 
         float x = w.x; float x2 = x*x; float x4 = x2*x2;
         float y = w.y; float y2 = y*y; float y4 = y2*y2;
@@ -139,19 +139,15 @@ float de_mandelbulb(vec3 pos)
         w.x =  64.0*x*y*z*(x2-z2)*k4*(x4-6.0*x2*z2+z4)*k1*k2;
         w.y = -16.0*y2*k3*k4*k4 + k1*k1;
         w.z = -8.0*y*k4*(x4*x4 - 28.0*x4*x2*z2 + 70.0*x4*z4 - 28.0*x2*z2*z4 + z4*z4)*k1*k2;
-
-        w += pos;
 #else
-        r = length(w);
-        if (r > bailout)
-            break;
+        // http://blog.hvidtfeldts.net/index.php/2011/09/
+        //     distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 
         // Convert to polar coordinates
         // float theta = acos(w.z / r);
         // float phi   = atan(w.y, w.x);
         float theta = acos(w.y / r);
         float phi   = atan(w.x, w.z);
-        dr          = pow(r, power - 1.0) * power * dr + 1.0;
 
         // Scale and rotate the point
         float zr = pow(r, power);
@@ -161,10 +157,17 @@ float de_mandelbulb(vec3 pos)
         // Convert back to cartesian coordinates
         // w = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
         w = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
-        w += pos;
 #endif
+        w += pos;
+
+        // Running scalar derivative
+        dr = pow(r, power - 1.0) * power * dr + 1.0;
+
+        // Orbit trap, just use the three coordinate system axis-aligned planes
+        // trap = min(trap, abs(w));
     }
 
+    // surf_col = trap;
     return 0.5 * log(r) * r / dr;
 }
 
@@ -177,7 +180,7 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-#if 1
+#if 0
     return de_mandelbulb(pos);
 #else
     return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
@@ -212,18 +215,20 @@ bool ray_sphere( vec3 origin
     float t  = dot(dir, rs);
     float a  = dot(rs, rs) - t * t;
     float r2 = sphereR * sphereR;
+
     if (a > r2)
         return false;
-    float h = sqrt(r2 - a);
-    tmin = t - h;
-    tmax = t + h;
+
+    float h  = sqrt(r2 - a);
+    tmin     = t - h;
+    tmax     = t + h;
+
     return true;
 }
 
-void ray_march( vec3 origin
+bool ray_march( vec3 origin
               , vec3 dir
               , out float t             // T along the ray
-              , out float dist          // Last distance (to see if we got close to anything)
               , out float step_gradient // Step based gradient (for cheap fake AO)
               )
 {
@@ -237,20 +242,26 @@ void ray_march( vec3 origin
     // to the surface (DEs get very imprecise when we're starting to far away)
     float tspheremin, tspheremax;
     if (!ray_sphere(origin, dir, vec3(0,0,0), 1.25, tspheremin, tspheremax))
-        return;
-
+        return false;
     t = tspheremin;
-    int steps = 0;
-    for (steps=0; steps<MAX_STEPS; steps++)
+
+    for (int steps=0; steps<MAX_STEPS; steps++)
     {
         vec3 pos = origin + t * dir;
-        dist = distance_estimator(pos);
+        float dist = distance_estimator(pos);
         t += dist;
-        if (dist < MIN_DIST/* || dist > tspheremax*/)
-            break;
+
+        if (t > tspheremax) // Left bounding sphere?
+            return false;
+
+        if (dist < MIN_DIST) // Close enough to surface?
+        {
+            step_gradient = 1.0 - float(steps) / float(MAX_STEPS);
+            return true;
+        }
     }
 
-    step_gradient = 1.0 - float(steps) / float(MAX_STEPS);
+    return false;
 }
 
 vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
@@ -315,9 +326,9 @@ void main()
 
     // Ray march
     float t, last_dist, step_gradient;
-    ray_march(origin, dir, t, last_dist, step_gradient);
+    bool hit = ray_march(origin, dir, t, step_gradient);
 
-    if (last_dist < 0.1)
+    if (hit)
     {
         // Compute intersection
         vec3 isec_pos = origin + dir * t;
