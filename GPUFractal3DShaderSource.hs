@@ -56,9 +56,8 @@ import QQPlainText
 -- TODO: Understand and try our some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
--- TODO: Cleanup / modularize Mandelbulb code some more, have TriplexPower8() function, have
---       CartesianToSpherical and vice versa functions
 -- TODO: Implement some more BRDFs besides Lambert
+-- TODO: Collect epsilons and settings into one place
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
@@ -109,75 +108,110 @@ float de_cone(vec3 pos, vec2 c)
     return dot(c, vec2(q, pos.y));
 }
 
+// http://en.wikipedia.org/wiki/Spherical_coordinate_system
+void cartesian_to_spherical(vec3 p, out float r, out float theta, out float phi)
+{
+    r     = length(p);
+    theta = acos(p.z / r);
+    phi   = atan(p.y, p.x);
+}
+vec3 spherical_to_cartesian(float r, float theta, float phi)
+{
+    return r * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+}
+
+vec3 triplex_pow(vec3 w, float power)
+{
+    // General pow() for our triplex numbers
+    //
+    // http://blog.hvidtfeldts.net/index.php/2011/09/
+    //     distance-estimated-3d-fractals-iv-the-holy-grail/
+    //
+    // http://blog.hvidtfeldts.net/index.php/2011/09/
+    //     distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
+
+    float r, theta, phi;
+    cartesian_to_spherical(w, r, theta, phi);
+
+    // Scale and rotate the point
+    float zr = pow(r, power);
+    theta    = theta * power;
+    phi      = phi * power;
+
+    return spherical_to_cartesian(zr, theta, phi);
+}
+
+vec3 triplex_pow8(vec3 w)
+{
+    // Optimized pow(x, 8) for our triplex numbers (special case without transcendentals)
+    //
+    // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm 
+    //
+    // (modified so the Mandelbulb has the same orientation as the general triplex_pow() one)
+
+    float x = w.x; float x2 = x*x; float x4 = x2*x2;
+    float y = w.y; float y2 = y*y; float y4 = y2*y2;
+    float z = w.z; float z2 = z*z; float z4 = z2*z2;
+
+    float k3 = y2 + x2;
+    float k2 = inversesqrt( k3*k3*k3*k3*k3*k3*k3 );
+    float k1 = y4 + z4 + x4 - 6.0*z2*x2 - 6.0*y2*z2 + 2.0*x2*y2;
+    float k4 = y2 - z2 + x2;
+
+    return vec3( -8.0*z*k4*(y4*y4 - 28.0*y4*y2*x2 + 70.0*y4*x4 - 28.0*y2*x2*x4 + x4*x4)*k1*k2
+               , 64.0*y*z*x*(y2-x2)*k4*(y4-6.0*y2*x2+x4)*k1*k2
+               , -16.0*z2*k3*k4*k4 + k1*k1
+               );
+}
+
 #define POWER8
 
 float de_mandelbulb(vec3 pos)
 {
+#ifdef POWER8
+    float power = 8;
+#else
+    // Animate power
     float pow_offs = mod(in_time, 10);
     if (pow_offs > 5)
         pow_offs = 10 - pow_offs;
-    float power            =
-#ifdef POWER8
-        8;
-#else
-        pow_offs + 2;
+    float power = pow_offs + 2;
 #endif
     const float bailout    = 4;
     const int   iterations = 100;
 
+    // Swap some axis so our Mandelbulb is upright instead of lying on the side
+    pos = pos.zxy;
+
+    // Iterate. This is pretty much what we'd do for a Mandelbrot set, except that instead of
+    // complex numbers we have triplex numbers with a special power operation that rotates
+    // and scales in spherical coordinates
     vec3  w  = pos;
     float dr = 1.0;
     float r  = 0.0;
     // vec3 trap = abs(w);
     for (int i=0; i<iterations; i++)
     {
-        r = length(w);
+        r = length(w); // TODO: Might want to re-use this for cartesian_to_spherical()
         if (r > bailout)
             break;
 #ifdef POWER8
-        // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm 
-
-        float x = w.x; float x2 = x*x; float x4 = x2*x2;
-        float y = w.y; float y2 = y*y; float y4 = y2*y2;
-        float z = w.z; float z2 = z*z; float z4 = z2*z2;
-
-        float k3 = x2 + z2;
-        float k2 = inversesqrt( k3*k3*k3*k3*k3*k3*k3 );
-        float k1 = x4 + y4 + z4 - 6.0*y2*z2 - 6.0*x2*y2 + 2.0*z2*x2;
-        float k4 = x2 - y2 + z2;
-
-        w.x =  64.0*x*y*z*(x2-z2)*k4*(x4-6.0*x2*z2+z4)*k1*k2;
-        w.y = -16.0*y2*k3*k4*k4 + k1*k1;
-        w.z = -8.0*y*k4*(x4*x4 - 28.0*x4*x2*z2 + 70.0*x4*z4 - 28.0*x2*z2*z4 + z4*z4)*k1*k2;
+        w = triplex_pow8(w);
 #else
-        // http://blog.hvidtfeldts.net/index.php/2011/09/
-        //     distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
-
-        // Convert to polar coordinates
-        // float theta = acos(w.z / r);
-        // float phi   = atan(w.y, w.x);
-        float theta = acos(w.y / r);
-        float phi   = atan(w.x, w.z);
-
-        // Scale and rotate the point
-        float zr = pow(r, power);
-        theta    = theta * power;
-        phi      = phi * power;
-
-        // Convert back to cartesian coordinates
-        // w = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
-        w = zr * vec3(sin(phi) * sin(theta), cos(theta), sin(theta) * cos(phi));
+        w = triplex_pow(w, power);
 #endif
         w += pos;
 
         // Running scalar derivative
         dr = pow(r, power - 1.0) * power * dr + 1.0;
 
-        // Orbit trap, just use the three coordinate system axis-aligned planes
+        // Use the three coordinate system axis-aligned planes as orbit traps
         // trap = min(trap, abs(w));
     }
 
     // surf_col = trap;
+
+    // Distance estimate from running derivative and escape radius
     return 0.5 * log(r) * r / dr;
 }
 
@@ -190,15 +224,17 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-#if 1
+#if 0
+    // Mandelbulb scene
     return de_mandelbulb(pos);
 #else
-    // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
+    // Simple DE test scene
     return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
              smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
                smin(de_sphere(pos, 0.3),
                  de_torus(pos, 0.8, 0.2),
                    32), 32), 64);
+    // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
 #endif
 }
 
@@ -239,8 +275,8 @@ bool ray_sphere( vec3 origin
 
 bool ray_march( vec3 origin
               , vec3 dir
-              , out float t             // T along the ray
-              , out float step_gradient // Step based gradient (for cheap fake AO)
+              , out float t             // Intersection T along the ray
+              , out float step_gradient // Step count based gradient (for cheap fake AO)
               )
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
@@ -322,9 +358,9 @@ void main()
     vec2 ndc = vec2(gl_FragCoord.x / in_screen_wdh, gl_FragCoord.y / in_screen_hgt) * 2.0 - 1.0;
 
     // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
-    float aspect = in_screen_wdh / in_screen_hgt;
-    float width  = 2;
-    float height = width / aspect;
+    float aspect  = in_screen_wdh / in_screen_hgt;
+    float width   = 2;
+    float height  = width / aspect;
     mat4x4 unproj = unproj_ortho(width, height);
 
     // Orbit camera
