@@ -58,7 +58,7 @@ main = do
             _asCurTick <- getTick
             let as = AppState { _asLastEscPress = -1
                               , _asFrameTimes   = BS.empty 120 -- Average over last N FPS
-                              , _asMode         = ModeShaderTest
+                              , _asMode         = minBound
                               , _asFBScale      = 1
                               , ..
                               }

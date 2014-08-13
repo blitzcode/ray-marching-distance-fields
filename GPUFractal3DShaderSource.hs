@@ -2,7 +2,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module GPUFractal3DShaderSource ( vsSrcFSQuad
-                                , fsSrcBasic
+                                , fsSrcFractal
                                 ) where
 
 import qualified Data.Text as T
@@ -44,7 +44,6 @@ import QQPlainText
 -- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
 -- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
--- TODO: Maybe generate variations of the shader by running it through cpphs?
 -- TODO: Separate shader entry points for distance field tests, arbitrary power code and
 --       transcendental free power 8 code, SoftLamFakeAO and IBL
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
@@ -59,7 +58,7 @@ import QQPlainText
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
 
-vsSrcFSQuad, fsSrcBasic :: B.ByteString
+vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
 vsSrcFSQuad = TE.encodeUtf8 . T.pack $ [plaintext|
 
@@ -77,9 +76,9 @@ void main()
 
 |]
 
-fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
+fsSrcFractal = TE.encodeUtf8 . T.pack $ [plaintext|
 
-#version 330 core
+// '#version 330 core' defined externally when we generate variations of this shader
 
 uniform float in_time;
 uniform float in_screen_wdh;
@@ -164,8 +163,6 @@ vec3 triplex_pow8(vec3 w)
                );
 }
 
-#define POWER8
-
 float de_mandelbulb(vec3 pos)
 {
 #ifdef POWER8
@@ -224,7 +221,7 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-#if 0
+#ifdef MANDELBULB_SCENE
     // Mandelbulb scene
     return de_mandelbulb(pos);
 #else

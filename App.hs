@@ -35,11 +35,13 @@ import GPUFractal3D
 import QuadRendering
 import qualified BoundedSequence as BS
 
-data Mode = ModeJuliaAnim
-          | ModeJuliaAnimSmooth
-          | ModeMandelBrot
+data Mode = ModeMandelBrot
           | ModeMandelBrotSmooth
-          | ModeShaderTest
+          | ModeJuliaAnim
+          | ModeJuliaAnimSmooth
+          | ModeDETestShader
+          | ModeMBPower8Shader
+          | ModeMBGeneralShader
             deriving (Enum, Eq, Bounded, Show)
 
 data AppState = AppState { _asCurTick      :: !Double
@@ -146,18 +148,17 @@ draw = do
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
     -- Draw fractal into our frame buffer texture
-    let fillFB = void . fillFrameBuffer _aeFB
-        drawFB = void . drawIntoFrameBuffer _aeFB
+    let fillFB             = void . fillFrameBuffer _aeFB
+        drawFB             = void . drawIntoFrameBuffer _aeFB
+        drawGPUFractal shd w h = drawGPUFractal3D _aeGPUFrac3D shd w h _asCurTick
      in liftIO $ case _asMode of
         ModeJuliaAnim        -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
         ModeJuliaAnimSmooth  -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
         ModeMandelBrot       -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
         ModeMandelBrotSmooth -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
-        ModeShaderTest       -> drawFB $ \w h       -> drawGPUFractal3D _aeGPUFrac3D w h _asCurTick
-                                --GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
-                                --GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-                                --void . withQuadRenderBuffer _aeQR w h $ \qb -> do
-                                  --  liftIO $ drawText _aeFontTexture qb 3 3 0x00000000 "Test"
+        ModeDETestShader     -> drawFB $ \w h       -> drawGPUFractal FSDETestShader    w h
+        ModeMBPower8Shader   -> drawFB $ \w h       -> drawGPUFractal FSMBPower8Shader  w h
+        ModeMBGeneralShader  -> drawFB $ \w h       -> drawGPUFractal FSMBGeneralShader w h
     -- Render everything quad based
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do
