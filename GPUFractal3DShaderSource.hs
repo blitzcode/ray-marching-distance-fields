@@ -307,9 +307,9 @@ mat4x4 unproj_ortho(float width, float height)
 
 mat4x4 lookat(vec3 eye, vec3 focus, vec3 up)
 {
-    vec3 zaxis = normalize(focus - eye);
-    vec3 xaxis = normalize(cross(zaxis, up));
-    vec3 yaxis = cross(xaxis, zaxis);
+    vec3 zaxis = normalize(eye - focus);
+    vec3 xaxis = normalize(cross(up, zaxis));
+    vec3 yaxis = cross(zaxis, xaxis);
     return mat4x4(xaxis.x, xaxis.y, xaxis.z, 0.0,
                   yaxis.x, yaxis.y, yaxis.z, 0.0,
                   zaxis.x, zaxis.y, zaxis.z, 0.0,
@@ -337,8 +337,8 @@ void main()
     mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
 
     // Transform ray
-    vec3 origin = (camera * unproj * vec4(ndc, 0.0, 1.0)     ).xyz;
-    vec3 dir    = (camera *          vec4(0.0, 0.0, 1.0, 0.0)).xyz;
+    vec3 origin = (camera * unproj * vec4(ndc, 0.0,  1.0)     ).xyz;
+    vec3 dir    = (camera *          vec4(0.0, 0.0, -1.0, 0.0)).xyz;
 
     // Ray march
     float t, last_dist, step_gradient;
