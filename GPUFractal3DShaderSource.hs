@@ -102,6 +102,12 @@ float de_rounded_box(vec3 pos, vec3 box, float r)
 {
     return length(max(abs(pos) - box, 0.0)) - r;
 }
+float de_cone(vec3 pos, vec2 c)
+{
+    // c must be normalized
+    float q = length(pos.xz);
+    return dot(c, vec2(q, pos.y));
+}
 
 #define POWER8
 
@@ -184,9 +190,10 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-#if 0
+#if 1
     return de_mandelbulb(pos);
 #else
+    // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
     return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
              smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
                smin(de_sphere(pos, 0.3),
