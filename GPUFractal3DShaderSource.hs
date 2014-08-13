@@ -56,7 +56,7 @@ import QQPlainText
 -- TODO: Understand and try our some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
--- TODO: Cleanup / modularize Mandelbub code some more, have BulbPower() function, have
+-- TODO: Cleanup / modularize Mandelbulb code some more, have TriplexPower8() function, have
 --       CartesianToSpherical and vice versa functions
 -- TODO: Implement some more BRDFs besides Lambert
 
@@ -341,7 +341,7 @@ void main()
     vec3 dir    = (camera *          vec4(0.0, 0.0, -1.0, 0.0)).xyz;
 
     // Ray march
-    float t, last_dist, step_gradient;
+    float t, step_gradient;
     bool hit = ray_march(origin, dir, t, step_gradient);
 
     if (hit)
@@ -358,6 +358,9 @@ void main()
                        vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
                      ) * pow(step_gradient, 3);*/
         vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
+        /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
+                     clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
+        //vec3 color = vec3((isec_n + 1) * 0.5);
 
         // Gamma correct and output
         vec3 gamma = pow(color, vec3(1.0 / 2.2));
