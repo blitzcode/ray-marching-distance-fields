@@ -38,7 +38,6 @@ import QQPlainText
 -- https://www.shadertoy.com/view/MdfGRr
 
 -- TODO: Need to add some form of near plane clipping
--- TODO: Have a maxT parameter to abort marching
 -- TODO: Implement perspective camera
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
@@ -57,6 +56,9 @@ import QQPlainText
 -- TODO: Understand and try our some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
+-- TODO: Cleanup / modularize Mandelbub code some more, have BulbPower() function, have
+--       CartesianToSpherical and vice versa functions
+-- TODO: Implement some more BRDFs besides Lambert
 
 vsSrcFSQuad, fsSrcBasic :: B.ByteString
 
@@ -75,6 +77,8 @@ void main()
 }
 
 |]
+
+fsSrcBasic = TE.encodeUtf8 . T.pack $ [plaintext|
 
 #version 330 core
 
