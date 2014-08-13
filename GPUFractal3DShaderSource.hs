@@ -249,12 +249,17 @@ bool ray_march( vec3 origin
     const float MIN_DIST  = 0.001;
 
     // First intersect with a bounding sphere. Helps quickly reject rays which can't
-    // possibly intersect with the scene and helps by bringing our starting point closer
+    // possibly intersect with the scene and brings our starting point closer
     // to the surface (DEs get very imprecise when we're starting to far away)
     float tspheremin, tspheremax;
     if (!ray_sphere(origin, dir, vec3(0,0,0), 1.25, tspheremin, tspheremax))
         return false;
     t = tspheremin;
+
+    // Ignore intersections behind the origin, might otherwise render scene with flipped
+    // ray direction if we're looking away from it
+    if (t < 0)
+        return false;
 
     for (int steps=0; steps<MAX_STEPS; steps++)
     {
