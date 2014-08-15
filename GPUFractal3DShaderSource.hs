@@ -44,19 +44,22 @@ import QQPlainText
 -- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
 -- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
--- TODO: Separate shader entry points for distance field tests, arbitrary power code and
---       transcendental free power 8 code, SoftLamFakeAO and IBL
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
 -- TODO: Make upscaled rendering the default, key to switch to tiled high quality rendering
 -- TODO: See if we can maybe integrate AntTweakBar or similar
 -- TODO: Mouse control for orbiting camera
--- TODO: Adjust ray marching MIN_DIST and FD normal epsilon based screen projection, like in
---       https://www.shadertoy.com/view/MdfGRr
+-- TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
+--       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
 -- TODO: Understand and try our some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
+-- TODO: Consider switching to faster normal computation using backwards differencing, do
+--       some comparisons to see if we lose any quality
+-- TODO: Look into ray step back epsilon again. Might want to compute screen-space normal
+--       (GLSL derivative functions) and base step back direction on that
+-- TODO: Could try implementing SSS based on the distance_ao() function
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
