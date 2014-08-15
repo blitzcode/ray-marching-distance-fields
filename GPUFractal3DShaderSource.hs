@@ -258,6 +258,20 @@ vec3 normal_central_difference(vec3 pos)
                           distance_estimator(pos + epsZ) - distance_estimator(pos - epsZ)));
 }
 
+// Compute the world-space surface normal from the screen-space partial derivatives
+// of the intersection distance (depth) and the camera transform
+vec3 normal_screen_space_depth(float dx, float dy, mat4x4 camera)
+{
+    // TODO: This is wrong...
+    return (camera * vec4(normalize(vec3(dx, dy, sqrt(dx*dx + dy*dy))), 0)).xyz;
+}
+
+// Normal from position through screen-space partial derivatives
+vec3 normal_screen_space_isec(vec3 p)
+{
+    return cross(normalize(dFdx(p)), normalize(dFdy(p)));
+}
+
 // http://www.iquilezles.org/www/material/nvscene2008/rwwtt.pdf
 // http://www.mazapan.se/news/2010/07/15/gpu-ray-marching-with-distance-fields/
 //
@@ -419,6 +433,9 @@ void main()
     // Ray march
     float t, step_gradient;
     bool hit = ray_march(origin, dir, t, step_gradient);
+
+    //float dx = dFdx(t);
+    //float dy = dFdy(t);
 
     if (hit)
     {
