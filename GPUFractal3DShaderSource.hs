@@ -418,10 +418,13 @@ void main()
     mat4x4 unproj = unproj_ortho(width, height);
 
     // Orbit camera
-    vec3 cam_pos;
+    vec3 cam_pos = vec3(0,0,2);
+#define AUTO_ROTATION
+#ifdef AUTO_ROTATION
     cam_pos.x = sin(in_time / 3.0) * 2;
     cam_pos.z = cos(in_time / 3.0) * 2;
     cam_pos.y = cos(in_time / 4.0) * 2;
+#endif
 
     // Camera transform. Look at center, orbit around it
     mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
