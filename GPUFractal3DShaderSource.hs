@@ -241,16 +241,11 @@ float distance_estimator(vec3 pos)
 // http://en.wikipedia.org/wiki/Finite_difference#Forward.2C_backward.2C_and_central_differences
 vec3 normal_backward_difference(vec3 pos)
 {
-    const float eps = 0.000001;
-    const vec3 epsX = vec3(eps, 0.0, 0.0); // TODO: Just put these directly in the equation
-    const vec3 epsY = vec3(0.0, eps, 0.0);
-    const vec3 epsZ = vec3(0.0, 0.0, eps);
-
     float c = distance_estimator(pos);
-
-    return normalize(vec3(c - distance_estimator(pos - epsX),
-                          c - distance_estimator(pos - epsY),
-                          c - distance_estimator(pos - epsZ)));
+    const float eps = 0.000001;
+    return normalize(vec3(c - distance_estimator(pos - vec3(eps, 0.0, 0.0)),
+                          c - distance_estimator(pos - vec3(0.0, eps, 0.0)),
+                          c - distance_estimator(pos - vec3(0.0, 0.0, eps))));
 }
 vec3 normal_central_difference(vec3 pos)
 {
