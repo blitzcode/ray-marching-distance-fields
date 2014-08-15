@@ -263,6 +263,29 @@ vec3 normal_central_difference(vec3 pos)
                           distance_estimator(pos + epsZ) - distance_estimator(pos - epsZ)));
 }
 
+// http://www.iquilezles.org/www/material/nvscene2008/rwwtt.pdf
+// http://www.mazapan.se/news/2010/07/15/gpu-ray-marching-with-distance-fields/
+//
+//               5    1
+// ao = 1 - k *  E   ---  (i * d - distfield(p + n * i * d))
+//              i=1  2^i
+//
+float distance_ao(vec3 p, vec3 n)
+{
+    float weight = 0.5;
+    float occl_sum = 0.0;
+    for (int i=0; i<5; i++)
+    {
+        float delta = pow(i + 1, 4) * 0.001;
+        occl_sum += weight * (delta - distance_estimator(p + n * delta));
+        weight *= 0.5;
+    }
+
+    float ao = 1.0 - clamp(occl_sum, 0, 1);
+
+    return pow(ao, 8);
+}
+
 bool ray_sphere( vec3 origin
                , vec3 dir
                , vec3 spherePos
