@@ -323,8 +323,17 @@ bool ray_march( vec3 origin
     // First intersect with a bounding sphere. Helps quickly reject rays which can't
     // possibly intersect with the scene and brings our starting point closer
     // to the surface (DEs get very imprecise when we're starting to far away)
+#ifdef MANDELBULB_SCENE
+    #ifdef POWER8
+        float b_sphere_r = 1.25;
+    #else
+        float b_sphere_r = 1.5;
+    #endif
+#else
+    float b_sphere_r = 1.0;
+#endif
     float tspheremin, tspheremax;
-    if (!ray_sphere(origin, dir, vec3(0,0,0), 1.25, tspheremin, tspheremax))
+    if (!ray_sphere(origin, dir, vec3(0,0,0), b_sphere_r, tspheremin, tspheremax))
         return false;
     t = tspheremin;
 
