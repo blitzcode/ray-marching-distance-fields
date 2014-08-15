@@ -365,8 +365,8 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
 {
     vec3  warm_col  = vec3(0.9 , 0.9 , 0.7);
     vec3  cool_col  = vec3(0.07, 0.07, 0.1);
-    float diff_warm = 0.25;
-    float diff_cool = 0.15;
+    float diff_warm = 0.35;
+    float diff_cool = 0.25;
 
     float ndotl     = (dot(light, n) + 1.0) * 0.5;
 
@@ -430,8 +430,9 @@ void main()
         // Compute intersection
         vec3 isec_pos = origin + dir * t;
 
-        // Step back from the surface a bit before computing the normal
-        vec3 isec_n = normal(isec_pos - dir * 0.00001);
+        // This number seems to be a good sweet spot for surface acne vs blurriness for
+        // the Mandelbulb, replace with something more robust
+        vec3 isec_n = normal_central_difference(isec_pos - dir * 0.001);
 
         // Shading
         //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
