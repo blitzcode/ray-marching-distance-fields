@@ -55,11 +55,8 @@ import QQPlainText
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
--- TODO: Consider switching to faster normal computation using backwards differencing, do
---       some comparisons to see if we lose any quality
--- TODO: Look into ray step back epsilon again. Might want to compute screen-space normal
---       (GLSL derivative functions) and base step back direction on that
 -- TODO: Could try implementing SSS based on the distance_ao() function
+-- TODO: Try to implement adaptive super-sampling
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -445,9 +442,13 @@ void main()
         // Compute intersection
         vec3 isec_pos = origin + dir * t;
 
+        // Step back from the surface a bit before computing the normal
+        //
         // This number seems to be a good sweet spot for surface acne vs blurriness for
         // the Mandelbulb, replace with something more robust
-        vec3 isec_n = normal_central_difference(isec_pos - dir * 0.001);
+        vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
+
+        //if (gl_FragCoord.x > in_screen_wdh / 2)
 
         // Shading
         //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
@@ -455,9 +456,10 @@ void main()
                        vec3(max(0, dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
                      ) * pow(step_gradient, 3);*/
         vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
+        //vec3 color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * pow(step_gradient, 3) * vec3(1);
         /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
                      clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
-        //vec3 color = vec3((isec_n + 1) * 0.5);
+        //vec3 color = (isec_n + 1) * 0.5;
 
         // Gamma correct and output
         vec3 gamma = pow(color, vec3(1.0 / 2.2));
