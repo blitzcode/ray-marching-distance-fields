@@ -244,14 +244,14 @@ float distance_estimator(vec3 pos)
 vec3 normal_backward_difference(vec3 pos)
 {
     float c = distance_estimator(pos);
-    const float eps = 0.000001;
+    const float eps = 0.00001;
     return normalize(vec3(c - distance_estimator(pos - vec3(eps, 0.0, 0.0)),
                           c - distance_estimator(pos - vec3(0.0, eps, 0.0)),
                           c - distance_estimator(pos - vec3(0.0, 0.0, eps))));
 }
 vec3 normal_central_difference(vec3 pos)
 {
-    const float eps = 0.000001;
+    const float eps = 0.00001;
     const vec3 epsX = vec3(eps, 0.0, 0.0);
     const vec3 epsY = vec3(0.0, eps, 0.0);
     const vec3 epsZ = vec3(0.0, 0.0, eps);
