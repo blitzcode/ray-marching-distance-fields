@@ -38,10 +38,12 @@ import QQPlainText
 -- https://www.shadertoy.com/view/MdfGRr
 
 -- TODO: Need to add some form of near plane clipping
+-- TODO: Have specialized versions of all the integer powers, i.e.
+--       http://www.fractalforums.com/index.php?action=dlattach;topic=742.0;attach=429;image
+--       http://en.wikipedia.org/wiki/Mandelbulb
 -- TODO: Implement perspective camera
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
--- TODO: Better AO based on distance estimation along the surface normal
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
 -- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
@@ -56,7 +58,9 @@ import QQPlainText
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
--- TODO: Try to implement adaptive super-sampling
+-- TODO: Try to implement adaptive super-sampling. Use derivatives to compute contrast
+--       based on intensity, keep computing new samples (pixel permuted Halton sequence etc.)
+--       until threshold is reached or maximum sample count exceeded
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -277,6 +281,8 @@ vec3 normal_screen_space_isec(vec3 p)
 // ao = 1 - k *  E   ---  (i * d - distfield(p + n * i * d))
 //              i=1  2^i
 //
+// TODO: Tweak / experiment some more, this doesn't look very good so far
+//
 float distance_ao(vec3 p, vec3 n)
 {
     float weight = 0.5;
@@ -445,8 +451,12 @@ void main()
 
         // Step back from the surface a bit before computing the normal
         //
-        // This number seems to be a good sweet spot for surface acne vs blurriness for
+        // This epsilon seems to be a good sweet spot for surface acne vs blurriness for
         // the Mandelbulb, replace with something more robust
+        //
+        // Experiments with trying to step back along the surface normal (cheaply computed
+        // in screen-space) did not improve results
+        //
         vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
 
         //if (gl_FragCoord.x > in_screen_wdh / 2)
