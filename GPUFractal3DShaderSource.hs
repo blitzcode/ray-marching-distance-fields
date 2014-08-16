@@ -58,9 +58,6 @@ import QQPlainText
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
--- TODO: Try to implement adaptive super-sampling. Use derivatives to compute contrast
---       based on intensity, keep computing new samples (pixel permuted Halton sequence etc.)
---       until threshold is reached or maximum sample count exceeded
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -410,28 +407,10 @@ mat4x4 lookat(vec3 eye, vec3 focus, vec3 up)
                   eye.x  , eye.y  , eye.z  , 1.0);
 }
 
-void main()
+vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
 {
     // Convert fragment coordinates to NDC [-1, 1]
-    vec2 ndc = vec2(gl_FragCoord.x / in_screen_wdh, gl_FragCoord.y / in_screen_hgt) * 2.0 - 1.0;
-
-    // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
-    float aspect  = in_screen_wdh / in_screen_hgt;
-    float width   = 2;
-    float height  = width / aspect;
-    mat4x4 unproj = unproj_ortho(width, height);
-
-    // Orbit camera
-    vec3 cam_pos = vec3(0,0,2);
-#define AUTO_ROTATION
-#ifdef AUTO_ROTATION
-    cam_pos.x = sin(in_time / 3.0) * 2;
-    cam_pos.z = cos(in_time / 3.0) * 2;
-    cam_pos.y = cos(in_time / 4.0) * 2;
-#endif
-
-    // Camera transform. Look at center, orbit around it
-    mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
+    vec2 ndc = (gl_FragCoord.xy + sample_offs) / vec2(in_screen_wdh, in_screen_hgt) * 2.0 - 1.0;
 
     // Transform ray
     vec3 origin = (camera * unproj * vec4(ndc, 0.0,  1.0)     ).xyz;
@@ -471,18 +450,70 @@ void main()
         /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
                      clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
         //vec3 color = (isec_n + 1) * 0.5;
+        //vec3 color = vec3(distance_ao(isec_pos, isec_n));
 
-        // Gamma correct and output
-        vec3 gamma = pow(color, vec3(1.0 / 2.2));
-        frag_color = vec4(gamma, 1);
+        return color;
     }
     else
-        frag_color = vec4(0, 0, 0, 1);
+        return vec3(0, 0, 0);
+}
+
+void main()
+{
+    // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
+    float aspect  = in_screen_wdh / in_screen_hgt;
+    float width   = 2;
+    float height  = width / aspect;
+    mat4x4 unproj = unproj_ortho(width, height);
+
+    // Orbit camera
+    vec3 cam_pos = vec3(0,0,2);
+//#define AUTO_ROTATION
+#ifdef AUTO_ROTATION
+    cam_pos.x = sin(in_time / 3.0) * 2;
+    cam_pos.z = cos(in_time / 3.0) * 2;
+    cam_pos.y = cos(in_time / 4.0) * 2;
+#endif
+
+    // Camera transform. Look at center, orbit around it
+    mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
+
+    vec3 color = render_frag_coord(vec2(0,0), camera, unproj);
+
+    // Use screen-space derivatives to check the contrast between neighbouring pixels,
+    // keep shooting more rays till it passes below a threshold. Works OK from an image
+    // quality standpoint, but performance is fairly poor due to the heavy cost of
+    // divergence, probably not worth it in practice compared to the naive super sampling
+    // we have on the frame buffer level
+#ifdef ADAPTIVE_SAMPLING
+    float weight = 1.0;
+    //frag_color = vec4(0,0,0,1);
+    if (fwidth(pow(color.r / weight, 1.0 / 2.2)) > 0.3)
+    {
+        //frag_color = vec4(1,0,1,1);
+        color += render_frag_coord(vec2(-0.25, 0.25), camera, unproj);
+        color += render_frag_coord(vec2(-0.25,-0.25), camera, unproj);
+        weight += 2.0;
+    }
+    if (fwidth(pow(color.r / weight, 1.0 / 2.2)) > 0.3)
+    {
+        //frag_color = vec4(0,1,0,1);
+        color += render_frag_coord(vec2( 0.25, 0.25), camera, unproj);
+        color += render_frag_coord(vec2( 0.25,-0.25), camera, unproj);
+        weight += 2.0;
+    }
+    //return;
+    color /= weight;
+#endif
+
+    // Gamma correct and output
+    vec3 gamma = pow(color, vec3(1.0 / 2.2));
+    frag_color = vec4(gamma, 1);
 
     /*
     // Debug: Fill entire clip space interval with a bordered rectangle
-    if (fs_uv.x >= -1.0 && fs_uv.x <= 1.0 && fs_uv.y >= -1.0 && fs_uv.y <= 1.0)
-        if (fs_uv.x >= -0.99 && fs_uv.x <= 0.99 && fs_uv.y >= -0.99 && fs_uv.y <= 0.99)
+    if (ndc.x >= -1.0 && ndc.x <= 1.0 && ndc.y >= -1.0 && ndc.y <= 1.0)
+        if (ndc.x >= -0.99 && ndc.x <= 0.99 && ndc.y >= -0.99 && ndc.y <= 0.99)
             frag_color = vec4(1, 1, 1, 1);
         else
             frag_color = vec4(1, 0, 0, 1);
