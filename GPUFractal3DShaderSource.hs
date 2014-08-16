@@ -89,7 +89,7 @@ out vec4 frag_color;
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 float de_sphere(vec3 pos, float r)
 {
-    return max(0.0, length(pos) - r);
+    return length(pos) - r;
 }
 float de_torus(vec3 pos, float torus_size, float torus_r)
 {
