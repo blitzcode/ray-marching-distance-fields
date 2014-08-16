@@ -226,6 +226,7 @@ float distance_estimator(vec3 pos)
     return de_mandelbulb(pos);
 #else
     // Simple DE test scene
+    // float offset = 0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
     return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
              smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
                smin(de_sphere(pos, 0.3),
