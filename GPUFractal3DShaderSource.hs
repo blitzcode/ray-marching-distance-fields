@@ -58,7 +58,6 @@ import QQPlainText
 -- TODO: Implement some more BRDFs besides Lambert
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
--- TODO: Keep working on distance_ao(), removing artifacts
 -- TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
 --       in triplex_pow()
 -- TODO: Consider some form of 'multisampling' where sample around the final intersection
@@ -286,29 +285,36 @@ vec3 normal_screen_space_isec(vec3 p)
 //              i=1  2^i
 //
 // The above never really seemed to work properly, though. At the very least it
-// seems to make sense to divide the 'd - distfield' term by d to have it normalized.
+// seems to be required to divide the 'd - distfield' term by d to have it normalized.
 //
 // Then, there are still errors due to the distance at p not being zero, which makes
-// sense as the ray marcher will stop at a min. distance. There's also some kind of
-// surface acne problem that can be mitigated a bit by back stepping on the ray like
-// for the normal computation.
+// sense as the ray marcher will stop at a min. distance. A cheap fix is to simply clamp
+// the term. There's also some kind of surface acne problem that can be mitigated  by back
+// stepping on the ray like for the normal computation.
 //
-// TODO: Work-in-progress...
-//
-float distance_ao(vec3 p, vec3 n, vec3 dir)
+float distance_ao(vec3 p, vec3 n)
 {
     float weight = 0.5;
     float occl_sum = 0.0;
     for (int i=0; i<5; i++)
     {
-        float delta = pow(i + 1.0, 4.0) * 0.001; // 0.001 - 0.625
+        // Test progressively larger spheres further away along the surface normal
+        float delta = pow(i + 1.0, 4.0) * 0.001; // i = 0..4, delta = 0.001..0.625
+
+        // Check sphere occlusion. The back stepping epsilon seems fairly large, but
+        // anything smaller causes issues. The change in position in combination with
+        // the min. distance at which the ray marcher stops will cause the occlusion
+        // term to leave its range, for now we fix this by simply clamping it instead
+        // of trying to account for these errors
         occl_sum += weight * clamp(
             1.0 - distance_estimator((p + n * 0.001) + n * delta) / delta, 0.0, 1.0);
+
+        // More distant, outer spheres contribute exponentially less to the occlusion sum
         weight *= 0.5;
     }
 
-    // Magic fudge factor to dark parts darker and bright parts brighter
-    occl_sum = (clamp((occl_sum * 2 - 1) * 1.5, -1, 1) + 1) * 0.5;
+    // Magic fudge factor to make dark parts darker and bright parts brighter
+    occl_sum = (clamp((occl_sum * 2 - 1) * 1.6, -1, 1) + 1) * 0.5;
     return pow(1.0 - occl_sum, 8.0);
 }
 
@@ -461,24 +467,22 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
         /*vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
                        vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
                      ) * pow(step_gradient, 3);*/
-        vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
+        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
         //vec3 color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * pow(step_gradient, 3) * vec3(1);
         /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
                      clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
         //vec3 color = (isec_n + 1) * 0.5;
 
-        //vec3 color = vec3(distance_ao(isec_pos, isec_n, dir));
-        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(distance_ao(isec_pos, isec_n, dir)));
-        /*
+        //vec3 color = vec3(distance_ao(isec_pos, isec_n));
+        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(distance_ao(isec_pos, isec_n)));
         vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
                        vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
-                     ) * distance_ao(isec_pos, isec_n, dir);
-        */
+                     ) * distance_ao(isec_pos, isec_n);
 
         return color;
     }
     else
-        return vec3(0, 0, 0);
+        return vec3(0);
 }
 
 void main()
