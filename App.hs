@@ -97,12 +97,8 @@ processGLFWEvent ev =
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
                 GLFW.Key'L
-                    | GLFW.modifierKeysShift mk -> do asFBScale %= min 4     . (* 2)
-                                                      asFrameTimes %= BS.clear
-                                                      resize
-                    | otherwise                 -> do asFBScale %= max 0.125 . (/ 2)
-                                                      asFrameTimes %= BS.clear
-                                                      resize
+                    | GLFW.modifierKeysShift mk -> asFBScale %= min 4     . (* 2) >> resize
+                    | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
@@ -130,6 +126,7 @@ resize = do
                 resizeFrameBuffer fb
                                   (round $ fromIntegral w * scale)
                                   (round $ fromIntegral h * scale)
+    asFrameTimes %= BS.clear
 
 -- Move through an enumeration, but wrap around when hitting the end
 wrapSucc, wrapPred :: (Enum a, Bounded a, Eq a) => a -> a
@@ -165,6 +162,14 @@ draw = do
             -- Draw frame buffer contents
             liftIO $ drawFrameBuffer _aeFB qb 0 0 (fromIntegral w) (fromIntegral h)
             -- FPS counter and mode display
+            liftIO $ drawQuad qb
+                              0                (fromIntegral h - 24)
+                              (fromIntegral w) (fromIntegral h)
+                              2
+                              FCBlack
+                              (TRBlend 0.5)
+                              Nothing
+                              QuadUVDefault
             ftStr <- updateAndReturnFrameTimes
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
@@ -190,7 +195,7 @@ updateAndReturnFrameTimes = do
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
-     in return $ printf "%.1fFPS/%.1fms (Worst: %.1f, Best: %.1f)"
+     in return $ printf "%.2fFPS/%.1fms (Worst: %.2f, Best: %.2f)"
                         (1.0 / fdMean ) (fdMean  * 1000)
                         (1.0 / fdWorst)
                         (1.0 / fdBest )
@@ -207,9 +212,8 @@ run = do
     resize
     liftIO $ GLFW.swapInterval 0
     -- Main loop
-    let loop = do
-          time <- liftIO $ getTick
-          asCurTick .= time
+    let loop frameIdx = do
+          asCurTick <~ liftIO getTick
           -- GLFW / OpenGL
           draw
           liftIO $ {-# SCC swapAndPoll #-} do
@@ -220,7 +224,9 @@ run = do
               traceOnGLError $ Just "main loop"
           tqGLFW <- view aeGLFWEventsQueue
           processAllEvents tqGLFW processGLFWEvent
+          -- Drop the first three frame deltas, they are often outliers
+          when (frameIdx < 3) $ asFrameTimes %= BS.clear
           -- Done?
-          flip unless loop =<< liftIO (GLFW.windowShouldClose window)
-     in loop
+          flip unless (loop $ frameIdx + 1) =<< liftIO (GLFW.windowShouldClose window)
+     in loop (0 :: Int)
 
