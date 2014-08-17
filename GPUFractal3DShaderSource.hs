@@ -83,6 +83,7 @@ void main()
 
 fsSrcFractal = TE.encodeUtf8 . T.pack $ [plaintext|
 
+
 // '#version 330 core' defined externally when we generate variations of this shader
 
 uniform float in_time;
@@ -314,7 +315,7 @@ float distance_ao(vec3 p, vec3 n)
     }
 
     // Magic fudge factor to make dark parts darker and bright parts brighter
-    occl_sum = (clamp((occl_sum * 2 - 1) * 1.6, -1, 1) + 1) * 0.5;
+    occl_sum = (clamp((occl_sum * 2 - 1) * 1.65, -1, 1) + 1) * 0.5;
     return pow(1.0 - occl_sum, 8.0);
 }
 
@@ -460,24 +461,34 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
         //
         vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
 
+#define DISTANCE_AO
+#ifdef DISTANCE_AO
+        float ao = distance_ao(isec_pos, isec_n);
+#else
+        float ao = pow((clamp((step_gradient * 2 - 1) * 1.4, -1, 1) + 1) * 0.5, 4.0);
+#endif
+
         //if (gl_FragCoord.x > in_screen_wdh / 2)
 
         // Shading
-        //vec3 color = vec3(((isec_n + 1) * 0.5) * pow(step_gradient, 2));
-        /*vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
-                       vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
-                     ) * pow(step_gradient, 3);*/
-        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(pow(step_gradient, 3)));
-        //vec3 color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * pow(step_gradient, 3) * vec3(1);
+        //vec3 color = vec3(((isec_n + 1) * 0.5) * ao);
+        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(ao));
+        //vec3 color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * vec3(ao);
         /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
                      clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
         //vec3 color = (isec_n + 1) * 0.5;
-
-        //vec3 color = vec3(distance_ao(isec_pos, isec_n));
-        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(distance_ao(isec_pos, isec_n)));
-        vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.5) +
+        //vec3 color = vec3(ao);
+        /*
+        vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.75) +
                        vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
-                     ) * distance_ao(isec_pos, isec_n);
+                     ) * ao;
+        */
+        vec3 color =
+        (
+          max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.6)+
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, 0, 1))),16))) * vec3(0,1,0) +
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, -1, 0))),16))) * vec3(1,0,0)
+        ) * ao;
 
         return color;
     }
@@ -548,6 +559,7 @@ void main()
         frag_color = vec4(0, 0, 0, 1);
     */
 }
+
 
 |]
 
