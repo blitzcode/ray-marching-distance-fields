@@ -62,6 +62,12 @@ import QQPlainText
 --       in triplex_pow()
 -- TODO: Consider some form of 'multisampling' where sample around the final intersection
 --       point
+-- TODO: Maybe add some post-process effects like bloom or some fake motion-blur / DoF
+-- TODO: Check out https://github.com/Syntopia/Fragmentarium/blob/master/Fragmentarium-Source/
+--       Examples/Historical%203D%20Fractals/Mandelbulb.frag
+-- TODO: Consider 3D texture cache with DE value in each cell, speeding up ray marching
+--       till we get close to the surface. Might not help that much as the most expensive
+--       DE invocations are the ones close to the surface
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -82,7 +88,6 @@ void main()
 |]
 
 fsSrcFractal = TE.encodeUtf8 . T.pack $ [plaintext|
-
 
 // '#version 330 core' defined externally when we generate variations of this shader
 
@@ -350,7 +355,7 @@ bool ray_march( vec3 origin
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
 
-    const int   MAX_STEPS = 64;
+    const int   MAX_STEPS = 128;
     const float MIN_DIST  = 0.001;
 
     // First intersect with a bounding sphere. Helps quickly reject rays which can't
@@ -465,7 +470,7 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
 #ifdef DISTANCE_AO
         float ao = distance_ao(isec_pos, isec_n);
 #else
-        float ao = pow((clamp((step_gradient * 2 - 1) * 1.4, -1, 1) + 1) * 0.5, 4.0);
+        float ao = pow((clamp((step_gradient * 2 - 1) * 1.25, -1, 1) + 1) * 0.5, 8.0);
 #endif
 
         //if (gl_FragCoord.x > in_screen_wdh / 2)
@@ -485,15 +490,21 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
         */
         vec3 color =
         (
-          max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.6)+
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, 0, 1))),16))) * vec3(0,1,0) +
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, -1, 0))),16))) * vec3(1,0,0)
+          max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.2)+
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, 0, 1))),5))) * vec3(1,0.4,0)*2 +
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, -1, 0))),5))) * vec3(0,0.51,0.51)*2
         ) * ao;
 
         return color;
     }
     else
+#define BG_GRADIENT
+#ifdef BG_GRADIENT
+        return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
+#else
         return vec3(0);
+#endif
+
 }
 
 void main()
@@ -544,9 +555,14 @@ void main()
     color /= weight;
 #endif
 
+#define GAMMA_CORRECT
+#ifdef GAMMA_CORRECT
     // Gamma correct and output
     vec3 gamma = pow(color, vec3(1.0 / 2.2));
     frag_color = vec4(gamma, 1);
+#else
+    frag_color = vec4(color, 1);
+#endif
 
     /*
     // Debug: Fill entire clip space interval with a bordered rectangle
@@ -559,7 +575,6 @@ void main()
         frag_color = vec4(0, 0, 0, 1);
     */
 }
-
 
 |]
 
