@@ -41,7 +41,6 @@ import QQPlainText
 -- TODO: Have specialized versions of all the integer powers, i.e.
 --       http://www.fractalforums.com/index.php?action=dlattach;topic=742.0;attach=429;image
 --       http://en.wikipedia.org/wiki/Mandelbulb
--- TODO: Implement perspective camera
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
 -- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
@@ -68,6 +67,8 @@ import QQPlainText
 -- TODO: Consider 3D texture cache with DE value in each cell, speeding up ray marching
 --       till we get close to the surface. Might not help that much as the most expensive
 --       DE invocations are the ones close to the surface
+-- TODO: Consider a hierarchical Z like setup where we first ray march 4x4 pixel blocks
+--       till we get close to the surface and then start off there at pixel resolution
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -295,7 +296,7 @@ vec3 normal_screen_space_isec(vec3 p)
 //
 // Then, there are still errors due to the distance at p not being zero, which makes
 // sense as the ray marcher will stop at a min. distance. A cheap fix is to simply clamp
-// the term. There's also some kind of surface acne problem that can be mitigated  by back
+// the term. There's also some kind of surface acne problem that can be mitigated by back
 // stepping on the ray like for the normal computation.
 //
 float distance_ao(vec3 p, vec3 n)
@@ -415,35 +416,8 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
     return min(kfinal, 1.0);
 }
 
-// NDC to camera space
-mat4x4 unproj_ortho(float width, float height)
+vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 {
-    return mat4x4(width / 2.0, 0.0         , 0.0, 0.0,
-                  0.0        , height / 2.0, 0.0, 0.0,
-                  0.0        , 0.0         , 1.0, 0.0,
-                  0.0        , 0.0         , 0.0, 1.0);
-}
-
-mat4x4 lookat(vec3 eye, vec3 focus, vec3 up)
-{
-    vec3 zaxis = normalize(eye - focus);
-    vec3 xaxis = normalize(cross(up, zaxis));
-    vec3 yaxis = cross(zaxis, xaxis);
-    return mat4x4(xaxis.x, xaxis.y, xaxis.z, 0.0,
-                  yaxis.x, yaxis.y, yaxis.z, 0.0,
-                  zaxis.x, zaxis.y, zaxis.z, 0.0,
-                  eye.x  , eye.y  , eye.z  , 1.0);
-}
-
-vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
-{
-    // Convert fragment coordinates to NDC [-1, 1]
-    vec2 ndc = (gl_FragCoord.xy + sample_offs) / vec2(in_screen_wdh, in_screen_hgt) * 2.0 - 1.0;
-
-    // Transform ray
-    vec3 origin = (camera * unproj * vec4(ndc, 0.0,  1.0)     ).xyz;
-    vec3 dir    = (camera *          vec4(0.0, 0.0, -1.0, 0.0)).xyz;
-
     // Ray march
     float t, step_gradient;
     bool hit = ray_march(origin, dir, t, step_gradient);
@@ -491,8 +465,8 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
         vec3 color =
         (
           max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.2)+
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, 0, 1))),5))) * vec3(1,0.4,0)*2 +
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1, -1, 0))),5))) * vec3(0,0.51,0.51)*2
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1,0,1))),5))) * vec3(1,0.4,0)*2 +
+          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1,-1,0))),5))) * vec3(0,.51,.51)*2
         ) * ao;
 
         return color;
@@ -504,30 +478,79 @@ vec3 render_frag_coord(vec2 sample_offs, mat4x4 camera, mat4x4 unproj)
 #else
         return vec3(0);
 #endif
+}
 
+mat4x4 lookat(vec3 eye, vec3 focus, vec3 up)
+{
+    vec3 zaxis = normalize(eye - focus);
+    vec3 xaxis = normalize(cross(up, zaxis));
+    vec3 yaxis = cross(zaxis, xaxis);
+    return mat4x4(xaxis.x, xaxis.y, xaxis.z, 0.0,
+                  yaxis.x, yaxis.y, yaxis.z, 0.0,
+                  zaxis.x, zaxis.y, zaxis.z, 0.0,
+                  eye.x  , eye.y  , eye.z  , 1.0);
+}
+
+void generate_ray( mat4x4 camera       // Camera transform
+                 , vec2 sample_offs    // Sample offset [-.5, +.5]
+                 , bool ortho          // Orthographic or perspective camera?
+                 , float width_or_hfov // Width of ortho viewing volume or horizontal FOV degrees
+                 , out vec3 origin
+                 , out vec3 dir
+                 )
+{
+    // Convert fragment coordinates and sample offset to NDC [-1, 1]
+    vec2 ndc = (gl_FragCoord.xy + sample_offs) / vec2(in_screen_wdh, in_screen_hgt) * 2.0 - 1.0;
+
+    // Generate ray from NDC and camera transform
+    float aspect = in_screen_wdh / in_screen_hgt;
+    if (ortho)
+    {
+        // Orthographic projection. Frame [-w/2, w/2] on X, center interval on Y while keeping aspect
+        float width  = width_or_hfov;
+        float height = width / aspect;
+        origin       = (camera * vec4(ndc * vec2(width / 2.0, height / 2.0), 0, 1)).xyz;
+        dir          = mat3(camera) * vec3(0, 0, -1);
+    }
+    else
+    {
+        // Perspective projection. Unlike the usual vertical FOV we deal with a horizontal
+        // one, just like the orthographic camera defined by its width
+        float hfov   = radians(width_or_hfov);
+        float fov_xs = tan(hfov / 2);
+        origin       = (camera * vec4(0, 0, 0, 1)).xyz;
+        dir          = mat3(camera) * normalize(vec3(ndc.x*fov_xs, ndc.y*fov_xs / aspect, -1.0));
+    }
 }
 
 void main()
 {
-    // Orthographic projection. Frame [-1, 1] on X, center interval on Y while keeping aspect
-    float aspect  = in_screen_wdh / in_screen_hgt;
-    float width   = 2;
-    float height  = width / aspect;
-    mat4x4 unproj = unproj_ortho(width, height);
-
     // Orbit camera
     vec3 cam_pos = vec3(0,0,2);
 #define AUTO_ROTATION
 #ifdef AUTO_ROTATION
-    cam_pos.x = sin(in_time / 3.0) * 2;
-    cam_pos.z = cos(in_time / 3.0) * 2;
-    cam_pos.y = cos(in_time / 4.0) * 2;
+    cam_pos.x = sin(in_time / 3.0);
+    cam_pos.z = cos(in_time / 3.0);
+    cam_pos.y = cos(in_time / 4.0);
+    // Keep a constant distance. Distance is so that a width = 2 orthographic projection
+    // matches up with a HFOV = 45 perspective projection as close as possible
+    cam_pos = normalize(cam_pos) * 2.414213562373095;
 #endif
 
     // Camera transform. Look at center, orbit around it
     mat4x4 camera = lookat(cam_pos, vec3(0,0,0), vec3(0,1,0));
 
-    vec3 color = render_frag_coord(vec2(0,0), camera, unproj);
+    // Generate camera ray
+    vec3 origin, dir;
+#define CAM_ORTHO
+#ifdef CAM_ORTHO
+    generate_ray(camera, vec2(0, 0), true, 2.0, origin, dir);
+#else
+    generate_ray(camera, vec2(0, 0), false, 45.0, origin, dir);
+#endif
+
+    // Trace and shade
+    vec3 color = render_ray(origin, dir, camera);
 
     // Use screen-space derivatives to check the contrast between neighbouring pixels,
     // keep shooting more rays till it passes below a threshold. Works OK from an image
@@ -536,22 +559,11 @@ void main()
     // we have on the frame buffer level
 #ifdef ADAPTIVE_SAMPLING
     float weight = 1.0;
-    //frag_color = vec4(0,0,0,1);
-    if (fwidth(pow(color.r / weight, 1.0 / 2.2)) > 0.3)
+    while (fwidth(pow(color.r / weight, 1.0 / 2.2) /* gamma */) > 0.3 /* threshold*/ && weight < 32)
     {
-        //frag_color = vec4(1,0,1,1);
-        color += render_frag_coord(vec2(-0.25, 0.25), camera, unproj);
-        color += render_frag_coord(vec2(-0.25,-0.25), camera, unproj);
-        weight += 2.0;
+        // <shoot next ray>
+        // weight += 1;
     }
-    if (fwidth(pow(color.r / weight, 1.0 / 2.2)) > 0.3)
-    {
-        //frag_color = vec4(0,1,0,1);
-        color += render_frag_coord(vec2( 0.25, 0.25), camera, unproj);
-        color += render_frag_coord(vec2( 0.25,-0.25), camera, unproj);
-        weight += 2.0;
-    }
-    //return;
     color /= weight;
 #endif
 
@@ -563,17 +575,6 @@ void main()
 #else
     frag_color = vec4(color, 1);
 #endif
-
-    /*
-    // Debug: Fill entire clip space interval with a bordered rectangle
-    if (ndc.x >= -1.0 && ndc.x <= 1.0 && ndc.y >= -1.0 && ndc.y <= 1.0)
-        if (ndc.x >= -0.99 && ndc.x <= 0.99 && ndc.y >= -0.99 && ndc.y <= 0.99)
-            frag_color = vec4(1, 1, 1, 1);
-        else
-            frag_color = vec4(1, 0, 0, 1);
-    else
-        frag_color = vec4(0, 0, 0, 1);
-    */
 }
 
 |]
