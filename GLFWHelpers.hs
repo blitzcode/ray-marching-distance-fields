@@ -35,7 +35,7 @@ modernOpenGL = do
     GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
     GLFW.windowHint $ GLFW.WindowHint'OpenGLForwardCompat True
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 3
-    GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 2
+    GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 3
 
 highDPIScaleFactor :: GLFW.Window -> IO Double
 highDPIScaleFactor win = do
