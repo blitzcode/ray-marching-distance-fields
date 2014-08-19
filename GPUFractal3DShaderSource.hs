@@ -51,7 +51,7 @@ import QQPlainText
 -- TODO: Mouse control for orbiting camera
 -- TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
 --       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
--- TODO: Understand and try our some of the other DE methods from
+-- TODO: Understand and try out some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
 -- TODO: Implement some more BRDFs besides Lambert
@@ -59,16 +59,18 @@ import QQPlainText
 -- TODO: Could try implementing SSS based on the distance_ao() function
 -- TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
 --       in triplex_pow()
--- TODO: Consider some form of 'multisampling' where sample around the final intersection
---       point
 -- TODO: Maybe add some post-process effects like bloom or some fake motion-blur / DoF
--- TODO: Check out https://github.com/Syntopia/Fragmentarium/blob/master/Fragmentarium-Source/
---       Examples/Historical%203D%20Fractals/Mandelbulb.frag
 -- TODO: Consider 3D texture cache with DE value in each cell, speeding up ray marching
 --       till we get close to the surface. Might not help that much as the most expensive
 --       DE invocations are the ones close to the surface
 -- TODO: Consider a hierarchical Z like setup where we first ray march 4x4 pixel blocks
 --       till we get close to the surface and then start off there at pixel resolution
+--       Also see
+--       http://www.fractalforums.com/mandelbulb-implementation/major-raymarching-optimization/
+-- TODO: Iteration count 100 is probably excessively high, find a better trade-off
+-- TODO: Check out
+--       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
+-- TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -181,13 +183,13 @@ float de_mandelbulb(vec3 pos)
     float power = 8;
 #else
     // Animate power
-    float pow_offs = mod(in_time, 10);
-    if (pow_offs > 5)
-        pow_offs = 10 - pow_offs;
+    float pow_offs = mod(in_time / 2, 9);
+    if (pow_offs > 4.5)
+        pow_offs = 9 - pow_offs;
     float power = pow_offs + 2;
 #endif
     const float bailout    = 4;
-    const int   iterations = 100;
+    const int   iterations = 25;
 
     // Swap some axis so our Mandelbulb is upright instead of lying on the side
     pos = pos.zxy;
@@ -440,14 +442,23 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         //
         vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
 
+        // TODO: We can fix some numerical problems when computing normals by switching to
+        //       screen-space normals when very thin, fin-like surfaces causes errors. This
+        //       is the worst for some of the lower powers of the mandelbulb, but unfortunately
+        //       those surfaces are so disjoint that they also causes issues for our distanced
+        //       based AO computations
+        //
+        // vec3 isec_n_ss = normal_screen_space_isec(isec_pos);
+        // if (dot(-dir, isec_n) < 0.0) // Clearly wrong normal?
+        //     isec_n = isec_n_ss; // Switch to screen space normal
+
 #define DISTANCE_AO
 #ifdef DISTANCE_AO
         float ao = distance_ao(isec_pos, isec_n);
 #else
         float ao = pow((clamp((step_gradient * 2 - 1) * 1.25, -1, 1) + 1) * 0.5, 8.0);
 #endif
-
-        //if (gl_FragCoord.x > in_screen_wdh / 2)
+        //if (gl_FragCoord.x < in_screen_wdh / 2)
 
         // Shading
         //vec3 color = vec3(((isec_n + 1) * 0.5) * ao);
