@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, RankNTypes, TemplateHaskell, LambdaCase, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards, TemplateHaskell, LambdaCase, FlexibleContexts #-}
 
 module App ( AppState(..)
            , AppEnv(..)
