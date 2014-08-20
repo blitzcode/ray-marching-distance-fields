@@ -18,6 +18,7 @@ import qualified Codec.Picture as JP
 import Linear
 
 import GLHelpers
+import CoordTransf
 
 loadHDRImage :: FilePath -> IO (Either String (JP.Image JP.PixelRGBF))
 loadHDRImage fn =
