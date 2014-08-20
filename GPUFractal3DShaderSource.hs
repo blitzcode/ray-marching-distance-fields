@@ -43,10 +43,7 @@ import QQPlainText
 --       http://en.wikipedia.org/wiki/Mandelbulb
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
--- TODO: IBL, draw Env. as background, analytically project normal into SH for lookup
--- TODO: Encode HDR Env Maps to SH, store as raw numbers in shader
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
--- TODO: Make upscaled rendering the default, key to switch to tiled high quality rendering
 -- TODO: See if we can maybe integrate AntTweakBar or similar
 -- TODO: Mouse control for orbiting camera
 -- TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
@@ -54,7 +51,7 @@ import QQPlainText
 -- TODO: Understand and try out some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
--- TODO: Implement some more BRDFs besides Lambert
+-- TODO: Implement some more BRDFs besides Lambert, fresnel term
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
 -- TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
@@ -71,6 +68,11 @@ import QQPlainText
 -- TODO: Check out
 --       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
 -- TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
+-- TODO: Fix seams in latLongHDREnvMapToCubeMap, check that bilinear filtering is correct
+-- TODO: Implement pre-convolution for the environment maps (have a reflection one, cosine
+--       and cosine^16)
+-- TODO: Could cache cube map conversions and convolutions of the environment map if it
+--       turns out to be too slow on startup
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
