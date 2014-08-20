@@ -424,8 +424,13 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
     float t, step_gradient;
     bool hit = ray_march(origin, dir, t, step_gradient);
 
-    //float dx = dFdx(t);
-    //float dy = dFdy(t);
+    // Can use the iteration count to add a snowy/foggy/glow type effect
+    //
+    // http://www.fractalforums.com/mandelbulb-implementation/faked-ambient-occlusion/
+    //     msg10526/#msg10526
+    //
+    // vec3 glow = (1.0 - pow((clamp((step_gradient * 2 - 1) * 1.5, -1, 1) + 1) * 0.5, 8.0))
+    //             * vec3(0.2, 0.3, 0.3);
 
     if (hit)
     {
