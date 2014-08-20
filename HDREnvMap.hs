@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module HDREnvMap ( loadHDRImage
+                 , buildTestLatLongEnvMap
                  , cubeMapPixelToDir
                  , latLongHDREnvMapToCubeMap
                  ) where
@@ -13,7 +14,7 @@ import Control.Exception
 import Control.Lens
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
---import qualified Graphics.Rendering.OpenGL.Raw as GLR
+import qualified Graphics.Rendering.OpenGL.Raw as GLR
 import qualified Codec.Picture as JP
 import Linear
 
@@ -21,12 +22,34 @@ import GLHelpers
 import CoordTransf
 
 loadHDRImage :: FilePath -> IO (Either String (JP.Image JP.PixelRGBF))
-loadHDRImage fn =
-    liftIO $ JP.readImage fn >>= \case
+loadHDRImage fn = do
+    JP.readImage fn >>= \case
         Right (JP.ImageRGBF img) -> return $ Right img
         Left err                 -> return $ Left err
         _                        -> return . Left  $ "Not an HDR RGBF image: " ++ fn
 
+-- Create an environment map representing a distant cube with colored faces
+buildTestLatLongEnvMap :: JP.Image JP.PixelRGBF
+buildTestLatLongEnvMap = JP.generateImage f w h
+  where w        = 512
+        h        = 256
+        colRight = JP.PixelRGBF 1 0 0 -- Red
+        colLeft  = JP.PixelRGBF 0 1 0 -- Green
+        colUp    = JP.PixelRGBF 0 0 1 -- Blue
+        colDown  = JP.PixelRGBF 1 0 1 -- Pink
+        colFront = JP.PixelRGBF 1 1 0 -- Yellow
+        colBack  = JP.PixelRGBF 0 1 1 -- Cyan
+        f x y    = let (theta, phi) = environmentPxToSpherical x y w
+                       dir          = localToWorld $ sphericalToCartesian theta phi
+                    in case () of
+                        _ | abs (dir^._x) >= abs (dir^._y) && abs (dir^._x) >= abs (dir^._z) ->
+                                if dir^._x > 0 then colRight else colLeft
+                          | abs (dir^._y) >= abs (dir^._x) && abs (dir^._y) >= abs (dir^._z) ->
+                                if dir^._y > 0 then colUp    else colDown
+                          | otherwise ->
+                                if dir^._z < 0 then colFront else colBack
+
+-- Get directional vector for a pixel on a cube map face
 cubeMapPixelToDir :: GL.TextureTargetCubeMapFace -> GL.TextureSize2D -> Int -> Int -> V3 Float
 cubeMapPixelToDir face (GL.TextureSize2D w h) x y =
     let vw               = fromIntegral x / fromIntegral w * 2 - 1
