@@ -69,7 +69,7 @@ sphericalToEnvironmentUV theta phi = (u, v)
           -- Theta = 0 should be straight up, but the way our HDR image is stored the
           -- first row of pixels is the bottom, invert
           theta' = pi - theta
-          u      = phi''' / pi * 2
+          u      = phi''' / (pi * 2)
           v      = theta' / pi
 
 sphericalToEnvironmentPx :: Float -> Float -> Int -> (Int, Int)
