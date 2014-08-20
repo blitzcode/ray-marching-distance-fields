@@ -66,11 +66,8 @@ sphericalToEnvironmentUV theta phi = (u, v)
           phi''  = if phi' > 2 * pi then phi' - 2 * pi else phi'
           -- We assume our images are stored CW, Phi rotates CCW around Z. Invert
           phi''' = 2 * pi - phi''
-          -- Theta = 0 should be straight up, but the way our HDR image is stored the
-          -- first row of pixels is the bottom, invert
-          theta' = pi - theta
           u      = phi''' / (pi * 2)
-          v      = theta' / pi
+          v      = theta / pi
 
 sphericalToEnvironmentPx :: Float -> Float -> Int -> (Int, Int)
 sphericalToEnvironmentPx theta phi width = (x, y)
@@ -82,7 +79,7 @@ sphericalToEnvironmentPx theta phi width = (x, y)
 
 environmentUVToSpherical :: Float -> Float -> (Float, Float)
 environmentUVToSpherical u v = (theta, phi)
-    where theta = pi - v * pi
+    where theta = v * pi
           phi'' = u * pi * 2 + pi / 2
           phi'  = if phi'' >= pi * 2 then phi'' - pi * 2 else phi''
           phi   = 2 * pi - phi'
