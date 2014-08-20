@@ -60,15 +60,11 @@ latLongHDREnvMapToCubeMap latlong =
               , GL.TextureCubeMapPositiveZ	
               , GL.TextureCubeMapNegativeZ	
               ] $ \face -> do
-          faceImg <- VSM.new $ w * w * 4 :: IO (VSM.IOVector Float)
-          forM_ [0..w - 1] $ \y -> forM_ [0..w - 1] $ \x -> do
-              let idx              = x * 4 + y * w * 4
-                  writeChannel c v = VSM.write faceImg (idx + c) v
-                  dir              = cubeMapPixelToDir face size x y
-              writeChannel 0 $ dir ^. _x
-              writeChannel 1 $ dir ^. _y
-              writeChannel 2 $ dir ^. _z
-              writeChannel 3 1
+          faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V4 Float))
+          forM_ [0..w - 1] $ \y -> forM_ [0..w - 1] $ \x ->
+              let idx = x + y * w
+                  dir = cubeMapPixelToDir face size x y
+               in VSM.write faceImg idx $ V4 (dir ^. _x) (dir ^. _y) (dir ^. _z) 1
           VSM.unsafeWith faceImg $
               GL.texImage2D face GL.NoProxy 0 GL.RGBA32F size 0 . GL.PixelData GL.RGBA GL.Float
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
