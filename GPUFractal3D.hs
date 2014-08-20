@@ -57,7 +57,8 @@ withGPUFractal3D f = do
              envStart <- liftIO getTick
              latlong <- either throwError return
                             =<< liftIO (loadHDRImage "./latlong_envmaps/uffizi_gallery.hdr")
-             gfEnvCubeMap <- snd <$> allocate (latLongHDREnvMapToCubeMap latlong)
+                        --return buildTestLatLongEnvMap
+             gfEnvCubeMap <- snd <$> allocate (latLongHDREnvMapToCubeMap latlong False)
                                               GL.deleteObjectName
              envEnd <- liftIO getTick
              liftIO . traceS TLInfo $ printf
