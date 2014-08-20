@@ -78,20 +78,20 @@ getCurTex2DSize = (\(GL.TextureSize2D w h) -> (fromIntegral w, fromIntegral h))
 
 data TextureFiltering = TFNone | TFMinMag | TFMinOnly | TFMagOnly
 
-setTextureFiltering :: TextureFiltering -> IO ()
-setTextureFiltering TFNone =
-    GL.textureFilter GL.Texture2D GL.$= ((GL.Nearest, Nothing        ), GL.Nearest)
-setTextureFiltering TFMinMag =
-    GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Linear')
-setTextureFiltering TFMinOnly =
-    GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Nearest)
-setTextureFiltering TFMagOnly =
-    GL.textureFilter GL.Texture2D GL.$= ((GL.Nearest, Nothing        ), GL.Linear')
+setTextureFiltering :: GL.ParameterizedTextureTarget t => t -> TextureFiltering -> IO ()
+setTextureFiltering target TFNone =
+    GL.textureFilter target GL.$= ((GL.Nearest, Nothing        ), GL.Nearest)
+setTextureFiltering target TFMinMag =
+    GL.textureFilter target GL.$= ((GL.Linear', Just GL.Linear'), GL.Linear')
+setTextureFiltering target TFMinOnly =
+    GL.textureFilter target GL.$= ((GL.Linear', Just GL.Linear'), GL.Nearest)
+setTextureFiltering target TFMagOnly =
+    GL.textureFilter target GL.$= ((GL.Nearest, Nothing        ), GL.Linear')
 
-setTextureClampST :: IO ()
-setTextureClampST =
+setTextureClampST :: GL.ParameterizedTextureTarget t => t -> IO ()
+setTextureClampST target =
     forM_ [GL.S, GL.T] $
-        \x -> GL.textureWrapMode GL.Texture2D x GL.$= (GL.Repeated, GL.ClampToEdge)
+        \x -> GL.textureWrapMode target x GL.$= (GL.Repeated, GL.ClampToEdge)
 
 data Transparency = TRNone
                   | TRBlend !Float

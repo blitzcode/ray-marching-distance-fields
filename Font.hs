@@ -23,7 +23,7 @@ withFontTexture f = do
     $ \tex -> do
       -- Font texture
       GL.textureBinding GL.Texture2D GL.$= Just tex
-      setTextureFiltering TFMinOnly
+      setTextureFiltering GL.Texture2D TFMinOnly
       -- Convert font grid bitmap image from Word32 list into byte array
       let fontImgArray =
               VU.fromListN (fontGridWdh * fontGridHgt * fontCharWdh * fontCharHgt `div` 8) .

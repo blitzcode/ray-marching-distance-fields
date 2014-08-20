@@ -54,10 +54,11 @@ withFrameBuffer w h fbDownscaling f = do
          bracket GL.genObjectName GL.deleteObjectName $ \fbFBO -> do
              -- Setup texture
              GL.textureBinding GL.Texture2D GL.$= Just fbTex
-             setTextureFiltering $ if   fbDownscaling == HighQualityDownscaling
-                                   then TFMinMag -- Need to generate MIP-maps after every change
-                                   else TFMagOnly
-             setTextureClampST -- No wrap-around artifacts at the FB borders
+             setTextureFiltering GL.Texture2D $
+                 if   fbDownscaling == HighQualityDownscaling
+                 then TFMinMag -- Need to generate MIP-maps after every change
+                 else TFMagOnly
+             setTextureClampST GL.Texture2D -- No wrap-around artifacts at the FB borders
              -- Setup FBO
              GL.bindFramebuffer GL.Framebuffer GL.$= fbFBO
              GL.framebufferTexture2D GL.Framebuffer (GL.ColorAttachment 0) GL.Texture2D fbTex 0
