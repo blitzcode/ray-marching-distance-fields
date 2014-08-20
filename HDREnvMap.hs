@@ -74,7 +74,7 @@ latLongHDREnvMapToCubeMap latlong =
         setTextureFiltering GL.TextureCubeMap TFMagOnly
 
         -- GLR.glEnable GLR.gl_TEXTURE_CUBE_MAP_SEAMLESS
-        -- setTextureClampST GL.TextureCubeMap
+        setTextureClampST GL.TextureCubeMap
 
         forM_ [ GL.TextureCubeMapPositiveX	
               , GL.TextureCubeMapNegativeX	
