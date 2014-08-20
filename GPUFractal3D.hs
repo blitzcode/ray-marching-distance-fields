@@ -19,6 +19,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
 
 import Trace
+import Timing
 import GLHelpers
 import Shaders
 import GPUFractal3DShaderSource
@@ -40,6 +41,7 @@ withGPUFractal3D f = do
     r <- runExceptT . runResourceT $ do
              gfVAO <- genObjectNameResource
              -- Build-in fragment shader can be overridden with a file
+             shaderStart <- liftIO getTick
              fsSrc <- either (\(_ :: IOException) -> return fsSrcFractal) return
                  =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
              -- Generate several shader variations through GLSL's pre-processor
@@ -50,11 +52,17 @@ withGPUFractal3D f = do
                      ]
                      $ \defines -> let src = "#version 330 core\n" <> defines <> fsSrc
                                     in tryMkShaderResource $ mkShaderProgram vsSrcFSQuad src []
+             shaderEnd <- liftIO getTick
              -- Environment cube maps
+             envStart <- liftIO getTick
              latlong <- either throwError return
                             =<< liftIO (loadHDRImage "./latlong_envmaps/uffizi_gallery.hdr")
              gfEnvCubeMap <- snd <$> allocate (latLongHDREnvMapToCubeMap latlong)
                                               GL.deleteObjectName
+             envEnd <- liftIO getTick
+             liftIO . traceS TLInfo $ printf
+                "withGPUFractal3D - Shader time: %.2fs, EnvMap time: %.2fs"
+                (shaderEnd - shaderStart) (envEnd - envStart)
              liftIO $ f GPUFractal3D { .. }
     either (traceAndThrow . printf "withGPUFractal3D - Init failed:\n%s") return r
 
