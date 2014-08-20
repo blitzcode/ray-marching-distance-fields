@@ -494,7 +494,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 #define BG_GRADIENT
 #ifdef BG_GRADIENT
         //return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
-        return ((texture(env, dir) + 1) * 0.5).xyz;
+        return texture(env, dir).xyz;
 #else
         return vec3(0);
 #endif
@@ -566,7 +566,7 @@ void main()
 #ifdef CAM_ORTHO
     generate_ray(camera, vec2(0, 0), true, 2.0, origin, dir);
 #else
-    generate_ray(camera, vec2(0, 0), false, 45.0*2, origin, dir);
+    generate_ray(camera, vec2(0, 0), false, 45.0 * 2, origin, dir);
 #endif
 
     // Trace and shade
