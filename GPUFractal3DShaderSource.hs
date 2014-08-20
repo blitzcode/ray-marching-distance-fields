@@ -98,6 +98,8 @@ uniform float in_time;
 uniform float in_screen_wdh;
 uniform float in_screen_hgt;
 
+uniform samplerCube env;
+
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
@@ -158,7 +160,7 @@ vec3 triplex_pow8(vec3 w)
 {
     // Optimized pow(x, 8) for our triplex numbers (special case without transcendentals)
     //
-    // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm 
+    // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm
     //
     // (modified so the Mandelbulb has the same orientation as the general triplex_pow() one)
 
@@ -449,7 +451,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 
         // TODO: We can fix some numerical problems when computing normals by switching to
         //       screen-space normals when very thin, fin-like surfaces causes errors. This
-        //       is the worst for some of the lower powers of the mandelbulb, but unfortunately
+        //       is most noticeable for some of the lower powers of the mandelbulb, but unfortunately
         //       those surfaces are so disjoint that they also causes issues for our distanced
         //       based AO computations
         //
@@ -463,6 +465,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 #else
         float ao = pow((clamp((step_gradient * 2 - 1) * 1.25, -1, 1) + 1) * 0.5, 8.0);
 #endif
+
         //if (gl_FragCoord.x < in_screen_wdh / 2)
 
         // Shading
@@ -490,7 +493,8 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
     else
 #define BG_GRADIENT
 #ifdef BG_GRADIENT
-        return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
+        //return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
+        return ((texture(env, dir) + 1) * 0.5).xyz;
 #else
         return vec3(0);
 #endif
@@ -558,11 +562,11 @@ void main()
 
     // Generate camera ray
     vec3 origin, dir;
-#define CAM_ORTHO
+//#define CAM_ORTHO
 #ifdef CAM_ORTHO
     generate_ray(camera, vec2(0, 0), true, 2.0, origin, dir);
 #else
-    generate_ray(camera, vec2(0, 0), false, 45.0, origin, dir);
+    generate_ray(camera, vec2(0, 0), false, 45.0*2, origin, dir);
 #endif
 
     // Trace and shade

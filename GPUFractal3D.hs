@@ -7,6 +7,7 @@ module GPUFractal3D ( withGPUFractal3D
                     , FractalShader(..)
                     ) where
 
+import Control.Applicative
 import Control.Exception
 import Control.Monad.Trans
 import Control.Monad.Except
@@ -21,11 +22,13 @@ import Trace
 import GLHelpers
 import Shaders
 import GPUFractal3DShaderSource
+import HDREnvMap
 
 data GPUFractal3D = GPUFractal3D { gfVAO          :: !GL.VertexArrayObject
                                  , gfDETestShd    :: !GL.Program
                                  , gfMBPower8Shd  :: !GL.Program
                                  , gfMBGeneralShd :: !GL.Program
+                                 , gfEnvCubeMap   :: !GL.TextureObject
                                  }
 
 data FractalShader = FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
@@ -33,7 +36,7 @@ data FractalShader = FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
 
 withGPUFractal3D :: (GPUFractal3D -> IO a) -> IO a
 withGPUFractal3D f = do
-    -- Create, compile and link shaders
+    -- Create, compile and link shaders, load resources
     r <- runExceptT . runResourceT $ do
              gfVAO <- genObjectNameResource
              -- Build-in fragment shader can be overridden with a file
@@ -47,25 +50,36 @@ withGPUFractal3D f = do
                      ]
                      $ \defines -> let src = "#version 330 core\n" <> defines <> fsSrc
                                     in tryMkShaderResource $ mkShaderProgram vsSrcFSQuad src []
+             -- Environment cube maps
+             latlong <- either throwError return
+                            =<< liftIO (loadHDRImage "./latlong_envmaps/uffizi_gallery.hdr")
+             gfEnvCubeMap <- snd <$> allocate (latLongHDREnvMapToCubeMap latlong)
+                                              GL.deleteObjectName
              liftIO $ f GPUFractal3D { .. }
-    either (traceAndThrow . printf "withGPUFractal3D - Shader init failed:\n%s") return r
+    either (traceAndThrow . printf "withGPUFractal3D - Init failed:\n%s") return r
 
 drawGPUFractal3D :: GPUFractal3D -> FractalShader -> Int -> Int -> Double -> IO ()
 drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
     -- We need a dummy VAO active with all vertex attributes disabled
     GL.bindVertexArrayObject GL.$= Just gfVAO
-    -- Setup shader
+    -- Bind shader
     let shd = case shdEnum of
                   FSDETestShader    -> gfDETestShd
                   FSMBPower8Shader  -> gfMBPower8Shd
                   FSMBGeneralShader -> gfMBGeneralShd
     GL.currentProgram GL.$= Just shd
+    -- Setup uniforms
     let uniformFloat nm val =
             GL.get (GL.uniformLocation shd nm) >>= \(GL.UniformLocation loc) ->
                 GLR.glUniform1f loc val
      in do uniformFloat "in_screen_wdh" $ fromIntegral w
            uniformFloat "in_screen_hgt" $ fromIntegral h
            uniformFloat "in_time"       $ realToFrac time
+    -- Setup textures
+    (GL.get $ GL.uniformLocation shd "env") >>= \loc ->
+        GL.uniform loc GL.$= GL.Index1 (0 :: GL.GLint)
+    GL.activeTexture   GL.$= GL.TextureUnit 0
+    GL.textureBinding GL.TextureCubeMap GL.$= Just gfEnvCubeMap
     -- Draw fullscreen quad. Don't need any VBO etc, the vertex shader will make this a
     -- proper quad. Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)

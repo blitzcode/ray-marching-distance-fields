@@ -24,7 +24,7 @@ executable mandelbulb
                        mtl >= 2.2.1,
                        transformers,
                        monad-control,
-                       linear,
+                       linear >= 1.10.1.1,
                        GLFW-b,
                        OpenGL >= 2.9.2.0,
                        OpenGLRaw,
