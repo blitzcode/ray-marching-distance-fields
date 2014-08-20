@@ -85,9 +85,13 @@ latLongHDREnvMapToCubeMap latlong =
               ] $ \face -> do
           faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V4 Float))
           forM_ [0..w - 1] $ \y -> forM_ [0..w - 1] $ \x ->
-              let idx = x + y * w
-                  dir = cubeMapPixelToDir face size x y
-               in VSM.write faceImg idx $ V4 (dir ^. _x) (dir ^. _y) (dir ^. _z) 1
+              let idx                  = x + y * w
+                  dir                  = cubeMapPixelToDir face size x y
+                  (theta, phi)         = cartesianToSpherical $ worldToLocal dir
+                  (px, py)             = sphericalToEnvironmentPx theta phi $ JP.imageWidth latlong
+                  (JP.PixelRGBF r g b) = JP.pixelAt latlong px py
+               in --VSM.write faceImg idx $ V4 (dir ^. _x) (dir ^. _y) (dir ^. _z) 1
+                  VSM.write faceImg idx $ V4 r g b 1
           VSM.unsafeWith faceImg $
               GL.texImage2D face GL.NoProxy 0 GL.RGBA32F size 0 . GL.PixelData GL.RGBA GL.Float
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
