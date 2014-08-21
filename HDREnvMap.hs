@@ -109,7 +109,7 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
               , GL.TextureCubeMapPositiveZ
               , GL.TextureCubeMapNegativeZ
               ] $ \face -> do
-          faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V4 Float))
+          faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V3 Float))
           forM_ [0..w - 1] $ \y -> forM_ [0..w - 1] $ \x ->
               let idx          = x + y * w
                   -- Convert from a cube map texel to a lat./long. environment map texel
@@ -119,19 +119,19 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
                   -- Lookup source texel
                   col          = pixelAtBilinear latlong u v
                   -- We can colorize the faces of the cube for debugging purposes
-                  colFace      = case face of GL.TextureCubeMapPositiveX -> V4 1 0 0 1 -- Red
-                                              GL.TextureCubeMapNegativeX -> V4 0 1 0 1 -- Green
-                                              GL.TextureCubeMapPositiveY -> V4 0 0 1 1 -- Blue
-                                              GL.TextureCubeMapNegativeY -> V4 1 0 1 1 -- Pink
-                                              GL.TextureCubeMapPositiveZ -> V4 1 1 0 1 -- Yellow
-                                              GL.TextureCubeMapNegativeZ -> V4 0 1 1 1 -- Cyan
-               in VSM.write faceImg idx $ V4 (col ^. _x) (col ^. _y) (col ^. _z) 1 *
+                  colFace      = case face of GL.TextureCubeMapPositiveX -> V3 1 0 0 -- Red
+                                              GL.TextureCubeMapNegativeX -> V3 0 1 0 -- Green
+                                              GL.TextureCubeMapPositiveY -> V3 0 0 1 -- Blue
+                                              GL.TextureCubeMapNegativeY -> V3 1 0 1 -- Pink
+                                              GL.TextureCubeMapPositiveZ -> V3 1 1 0 -- Yellow
+                                              GL.TextureCubeMapNegativeZ -> V3 0 1 1 -- Cyan
+               in VSM.write faceImg idx $ V3 (col ^. _x) (col ^. _y) (col ^. _z) *
                       if debugFaceColorize then colFace else 1
                   -- Debug output normal
-                  -- VSM.write faceImg idx $ V4 (dir ^. _x) (dir ^. _y) (dir ^. _z) 1
-          -- Upload (TODO: Might want to use half floats and drop the alpha)
+                  -- VSM.write faceImg idx $ V3 (dir ^. _x) (dir ^. _y) (dir ^. _z)
+          -- Upload and let OpenGL convert to half floats
           VSM.unsafeWith faceImg $
-              GL.texImage2D face GL.NoProxy 0 GL.RGBA32F size 0 . GL.PixelData GL.RGBA GL.Float
+              GL.texImage2D face GL.NoProxy 0 GL.RGB16F size 0 . GL.PixelData GL.RGB GL.Float
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
