@@ -71,10 +71,10 @@ pixelAtBilinear img u v =
         x         = floor upx
         y         = floor upy
         xp1       = (x + 1) `mod` (w - 1)
-        -- TODO: This is wrong. We can wrap around on the X axis, but for Y we can't wrap
+        -- TODO: Fix this properly. We can wrap around on the X axis, but for Y we can't wrap
         --       from top to bottom, but would instead need to reflect X around the center
         --       of the axis to get the correct texel
-        yp1       = (y + 1) `mod` (h - 1)
+        yp1       = min (h - 1) (y + 1)
         uRatio    = upx - fromIntegral x
         vRatio    = upy - fromIntegral y
         uOpposite = 1 - uRatio
