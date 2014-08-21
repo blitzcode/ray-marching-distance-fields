@@ -485,9 +485,16 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         vec3 color =
         (
           max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.2)+
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1,0,1))),5))) * vec3(1,0.4,0)*2 +
-          vec3(max(0, pow(dot(reflect(isec_n,-dir), normalize(vec3(1,-1,0))),5))) * vec3(0,.51,.51)*2
+          vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,0,1))),5))) * vec3(1,0.4,0)*2 +
+          vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,-1,0))),5))) * vec3(0,.51,.51)*2
         ) * ao;
+        /*
+        vec3 color =
+        (
+          max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*
+          texture(env, reflect(dir,isec_n)).xyz
+        ) * ao;
+        */
 
         return color;
     }
