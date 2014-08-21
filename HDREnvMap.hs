@@ -50,8 +50,8 @@ buildTestLatLongEnvMap = JP.generateImage f w h
 -- Get directional vector for a pixel on a cube map face
 cubeMapPixelToDir :: GL.TextureTargetCubeMapFace -> GL.TextureSize2D -> Int -> Int -> V3 Float
 cubeMapPixelToDir face (GL.TextureSize2D w h) x y =
-    let vw               = fromIntegral x / fromIntegral w * 2 - 1
-        vh               = fromIntegral y / fromIntegral h * 2 - 1
+    let vw               = (fromIntegral x + 0.5) / fromIntegral w * 2 - 1
+        vh               = (fromIntegral y + 0.5) / fromIntegral h * 2 - 1
      in normalize $ case face of
             GL.TextureCubeMapPositiveX -> V3    1  (-vh) (-vw)
             GL.TextureCubeMapNegativeX -> V3  (-1) (-vh)   vw
@@ -65,11 +65,15 @@ pixelAtBilinear :: JP.Image JP.PixelRGBF -> Float -> Float -> V3 Float
 pixelAtBilinear img u v =
     let w         = JP.imageWidth  img
         h         = JP.imageHeight img
-        upx       = u * (fromIntegral w - 1) -- No -.5, our texel centers are at 0
-        upy       = v * (fromIntegral h - 1)
+        -- TODO: Take into account texel centers?
+        upx       = u * (fromIntegral w)
+        upy       = v * (fromIntegral h)
         x         = floor upx
         y         = floor upy
         xp1       = (x + 1) `mod` (w - 1)
+        -- TODO: This is wrong. We can wrap around on the X axis, but for Y we can't wrap
+        --       from top to bottom, but would instead need to reflect X around the center
+        --       of the axis to get the correct texel
         yp1       = (y + 1) `mod` (h - 1)
         uRatio    = upx - fromIntegral x
         vRatio    = upy - fromIntegral y

@@ -68,7 +68,6 @@ import QQPlainText
 -- TODO: Check out
 --       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
 -- TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
--- TODO: Fix seams in latLongHDREnvMapToCubeMap, check that bilinear filtering is correct
 -- TODO: Implement pre-convolution for the environment maps (have a reflection one, cosine
 --       and cosine^16)
 -- TODO: Could cache cube map conversions and convolutions of the environment map if it
