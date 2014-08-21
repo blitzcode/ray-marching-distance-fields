@@ -50,8 +50,8 @@ buildTestLatLongEnvMap = JP.generateImage f w h
 -- Get directional vector for a pixel on a cube map face
 cubeMapPixelToDir :: GL.TextureTargetCubeMapFace -> GL.TextureSize2D -> Int -> Int -> V3 Float
 cubeMapPixelToDir face (GL.TextureSize2D w h) x y =
-    let vw               = (fromIntegral x + 0.5) / fromIntegral w * 2 - 1
-        vh               = (fromIntegral y + 0.5) / fromIntegral h * 2 - 1
+    let vw = (fromIntegral x + 0.5) / fromIntegral w * 2 - 1
+        vh = (fromIntegral y + 0.5) / fromIntegral h * 2 - 1
      in normalize $ case face of
             GL.TextureCubeMapPositiveX -> V3    1  (-vh) (-vw)
             GL.TextureCubeMapNegativeX -> V3  (-1) (-vh)   vw
