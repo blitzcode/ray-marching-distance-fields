@@ -135,3 +135,28 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
+-- TODO: There's plenty of room for improvement regarding our handling of pre-convolved
+--       environment maps. We could do the convolution in frequency space with SH,
+--       possibly even at runtime to save memory and allow for multiple exponents, see here:
+--
+--       http://www.cs.columbia.edu/~cs4162/slides/spherical-harmonic-lighting.pdf
+--       http://www.ppsloan.org/publications/StupidSH36.pdf
+--
+--       We could also adopt many improvements from AMD's cubemapgen tool, as described here:
+--
+--       http://seblagarde.wordpress.com/2012/06/10/amd-cubemapgen-for-physically-based-rendering/
+--       https://code.google.com/p/cubemapgen/
+
+-- http://en.wikipedia.org/wiki/Great-circle_distance#Formulas
+-- cos(theta1 - theta2)*sin(phi1)*sin(phi2) + cos(phi1)*cos(phi2)
+-- cos(psi) = sin(th1)*sin(th2)*cos(ph1-ph2) + cos(th1)*cos(th2)
+-- s = rψ = r cos−1 (cos θ1 cosθ2 + sin θ1 sin θ2 cos(φ1 − φ2)).
+
+-- Tasks
+--
+-- latlong downscaling code
+-- test cosine lobe in spherical coords generation
+-- function taking JP latlong image and returning convolved version
+-- compare convolution results to references we got
+-- implement caching scheme for convolutions, consider even just caching the final cube maps
+
