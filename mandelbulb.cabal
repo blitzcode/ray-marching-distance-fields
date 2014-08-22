@@ -41,7 +41,10 @@ executable mandelbulb
                        JuicyPixels >= 3.1.5.2,
                        deepseq,
                        template-haskell,
-                       resourcet >= 1.1.2.3
+                       resourcet >= 1.1.2.3,
+                       directory,
+                       filepath,
+                       deepseq
   -- hs-source-dirs:
   default-language:    Haskell2010
   -- -ddump-simpl -ddump-to-file

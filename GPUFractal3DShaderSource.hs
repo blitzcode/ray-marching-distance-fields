@@ -51,7 +51,8 @@ import QQPlainText
 -- TODO: Understand and try out some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
--- TODO: Implement some more BRDFs besides Lambert, fresnel term
+-- TODO: Implement some more BRDFs besides Lambert, fresnel term, normalized / energy
+--       preserving Phong, Blinn, etc.
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
 -- TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
@@ -64,14 +65,9 @@ import QQPlainText
 --       till we get close to the surface and then start off there at pixel resolution
 --       Also see
 --       http://www.fractalforums.com/mandelbulb-implementation/major-raymarching-optimization/
--- TODO: Iteration count 100 is probably excessively high, find a better trade-off
 -- TODO: Check out
 --       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
 -- TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
--- TODO: Implement pre-convolution for the environment maps (have a reflection one, cosine
---       and cosine^16)
--- TODO: Could cache cube map conversions and convolutions of the environment map if it
---       turns out to be too slow on startup
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -99,7 +95,11 @@ uniform float in_time;
 uniform float in_screen_wdh;
 uniform float in_screen_hgt;
 
-uniform samplerCube env;
+uniform samplerCube env_reflection;
+uniform samplerCube env_cos_1;
+uniform samplerCube env_cos_8;
+uniform samplerCube env_cos_64;
+uniform samplerCube env_cos_512;
 
 out vec4 frag_color;
 
@@ -482,19 +482,19 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
                        vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
                      ) * ao;
         */
+        /*
         vec3 color =
         (
           max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.2)+
           vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,0,1))),5))) * vec3(1,0.4,0)*2 +
           vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,-1,0))),5))) * vec3(0,.51,.51)*2
         ) * ao;
-        /*
+        */
         vec3 color =
         (
           max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*
-          texture(env, reflect(dir,isec_n)).xyz
+          texture(env_cos_8, reflect(dir,isec_n)).xyz*10
         ) * ao;
-        */
 
         return color;
     }
@@ -502,7 +502,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 #define BG_GRADIENT
 #ifdef BG_GRADIENT
         //return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
-        return texture(env, dir).xyz;
+        return texture(env_reflection, dir).xyz;
 #else
         return vec3(0);
 #endif

@@ -6,7 +6,7 @@ module HDREnvMap ( loadHDRImage
                  , cubeMapPixelToDir
                  , latLongHDREnvMapToCubeMap
                  , resizeHDRImage
-                 , cosineConvolveEnvMap
+                 , cosineConvolveHDREnvMap
                  ) where
 
 import Control.Monad
@@ -184,15 +184,16 @@ resizeHDRImage src dstw =
 --       http://www.cs.columbia.edu/~cs4162/slides/spherical-harmonic-lighting.pdf
 --       http://www.ppsloan.org/publications/StupidSH36.pdf
 --
---       We could also adopt many improvements from AMD's cubemapgen tool, as described here:
+--       We could also adopt improvements from AMD's cubemapgen tool, as described here:
 --
 --       http://seblagarde.wordpress.com/2012/06/10/amd-cubemapgen-for-physically-based-rendering/
 --       https://code.google.com/p/cubemapgen/
 
--- Convolve an environment map with a cosine lobe. This is a rather slow operation. A resolution
--- of 256x128 is both sufficient and probably the most that is computationally feasible
-cosineConvolveEnvMap :: JP.Image JP.PixelRGBF -> JP.Image JP.PixelRGBF
-cosineConvolveEnvMap src =
+-- Convolve an environment map with a cosine lobe. This is a rather slow O(n^4)
+-- operation. A resolution of 256x128 is both sufficient and probably the most
+-- that is computationally feasible
+cosineConvolveHDREnvMap :: JP.Image JP.PixelRGBF -> Float -> JP.Image JP.PixelRGBF
+cosineConvolveHDREnvMap src power =
   let srcw        = JP.imageWidth  src
       srch        = JP.imageHeight src
       -- We don't care about the actual correct angles as stored in the environment map,
@@ -204,7 +205,7 @@ cosineConvolveEnvMap src =
             thetaLobeCos        = cos thetaLobe
             thetaLobeSin        = sin thetaLobe
             phiLobe             = pxToPhi dstx
-            absPhiDiffCosLookup = VU.generate srcw (\x -> cos (abs $ phiLobe - pxToPhi x))
+            absPhiDiffCosLookup = VU.generate srcw (\x -> cos . abs $ phiLobe - pxToPhi x)
             -- Divide sum by number of hemisphere samples
          in (\(r, g, b, n) -> JP.PixelRGBF (r / n) (g / n) (b / n)) $
               forLoopFold 0 (< srch) (+ 1) (0, 0, 0, 0) $ \accY y ->
@@ -219,9 +220,12 @@ cosineConvolveEnvMap src =
                           cosAngle = thetaLobeCos * thetaPxCos +
                                      thetaLobeSin * thetaPxSin *
                                      VU.unsafeIndex absPhiDiffCosLookup x
+                          -- TODO: That power takes a good chunk of the overall runtime,
+                          --       consider using a lookup table
+                          cosAnglePow = cosAngle ** power
                           -- Sin theta factor to account for area distortion in the lat/long
                           -- parameterization of the sphere
-                          fac = thetaPxSin * cosAngle
+                          fac = thetaPxSin * cosAnglePow
                        in if   cosAngle > 0
                           then (ar + (r * fac), ag + (g * fac), ab + (b * fac), n + 1)
                           else (ar, ag, ab, n)
