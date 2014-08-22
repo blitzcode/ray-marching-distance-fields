@@ -5,11 +5,13 @@ module HDREnvMap ( loadHDRImage
                  , buildTestLatLongEnvMap
                  , cubeMapPixelToDir
                  , latLongHDREnvMapToCubeMap
+                 , resizeHDRImage
                  ) where
 
 import Control.Monad
 import Control.Exception
 import Control.Lens
+import Data.List
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
@@ -50,6 +52,7 @@ buildTestLatLongEnvMap = JP.generateImage f w h
 -- Get directional vector for a pixel on a cube map face
 cubeMapPixelToDir :: GL.TextureTargetCubeMapFace -> GL.TextureSize2D -> Int -> Int -> V3 Float
 cubeMapPixelToDir face (GL.TextureSize2D w h) x y =
+             -- Centering like this ensures clean filtering across cube map seams
     let vw = (fromIntegral x + 0.5) / fromIntegral w * 2 - 1
         vh = (fromIntegral y + 0.5) / fromIntegral h * 2 - 1
      in normalize $ case face of
@@ -60,14 +63,15 @@ cubeMapPixelToDir face (GL.TextureSize2D w h) x y =
             GL.TextureCubeMapPositiveZ -> V3   vw  (-vh)    1
             GL.TextureCubeMapNegativeZ -> V3 (-vw) (-vh)  (-1)
 
+-- Bilinear lookup into an HDR environment map
 -- http://en.wikipedia.org/wiki/Bilinear_filtering#Sample_code
 pixelAtBilinear :: JP.Image JP.PixelRGBF -> Float -> Float -> V3 Float
 pixelAtBilinear img u v =
     let w         = JP.imageWidth  img
         h         = JP.imageHeight img
-        -- TODO: Take into account texel centers?
-        upx       = u * (fromIntegral w)
-        upy       = v * (fromIntegral h)
+        -- Texel center at (0, 0)
+        upx       = u * (fromIntegral w - 1)
+        upy       = v * (fromIntegral h - 1)
         x         = floor upx
         y         = floor upy
         xp1       = (x + 1) `mod` (w - 1)
@@ -79,6 +83,9 @@ pixelAtBilinear img u v =
         vRatio    = upy - fromIntegral y
         uOpposite = 1 - uRatio
         vOpposite = 1 - vRatio
+        -- TODO: Switch to unsafe operations
+        -- tex xc yc = case JP.unsafePixelAt (JP.imageData img) (xc * 3 + yc * w * 3) of
+        --                 (JP.PixelRGBF r g b) -> V3 r g b
         tex xc yc = case JP.pixelAt img xc yc of (JP.PixelRGBF r g b) -> V3 r g b
      in (tex x y   ^* uOpposite + tex xp1 y   ^* uRatio) ^* vOpposite +
         (tex x yp1 ^* uOpposite + tex xp1 yp1 ^* uRatio) ^* vRatio
@@ -135,6 +142,38 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
+-- Scale an HDR image to a given destination width (keep aspect for height). This is
+-- certainly not the most sophisticated way to do image scaling and will produce poor
+-- results for small changes in size and upscaling in general. For our actual use case
+-- (downscaling an HDR environment map prior to convolution) its quality is adequate
+resizeHDRImage :: JP.Image JP.PixelRGBF -> Int -> JP.Image JP.PixelRGBF
+resizeHDRImage src dstw =
+  let srcw  = JP.imageWidth  src
+      srch  = JP.imageHeight src
+      dsth  = round $ (fromIntegral srch / fromIntegral srcw * fromIntegral dstw :: Float)
+      scale = fromIntegral srcw / fromIntegral dstw :: Float
+      taps  = ceiling $ scale :: Int
+      ntaps = fromIntegral $ taps * taps
+      step  = scale / fromIntegral taps
+      scaled dstx dsty =
+        let srcx1 = fromIntegral dstx * scale
+            srcy1 = fromIntegral dsty * scale
+         in (\(JP.PixelRGBF r g b) -> JP.PixelRGBF (r / ntaps) (g / ntaps) (b / ntaps)) $ foldl'
+              (\(JP.PixelRGBF ar ag ab) (srcx, srcy) ->
+                 let u        = srcx / (fromIntegral srcw - 1)
+                     v        = srcy / (fromIntegral srch - 1)
+                     V3 r g b = pixelAtBilinear src u v
+                  in JP.PixelRGBF (ar + r) (ag + g) (ab + b)
+              )
+              (JP.PixelRGBF 0 0 0)
+              [ ( srcx1 + fromIntegral x * step
+                , srcy1 + fromIntegral y * step
+                )
+                | y <- [0..taps - 1]
+                , x <- [0..taps - 1]
+              ]
+   in JP.generateImage scaled dstw dsth
+
 -- TODO: There's plenty of room for improvement regarding our handling of pre-convolved
 --       environment maps. We could do the convolution in frequency space with SH,
 --       possibly even at runtime to save memory and allow for multiple exponents, see here:
@@ -154,9 +193,10 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
 
 -- Tasks
 --
--- latlong downscaling code
 -- test cosine lobe in spherical coords generation
 -- function taking JP latlong image and returning convolved version
+--   Need to keep in mind that the lat/long representation is not an equal area mapping,
+--   need to add a cos(theta) term (also see CDF inversion code in dexter)
 -- compare convolution results to references we got
 -- implement caching scheme for convolutions, consider even just caching the final cube maps
 
