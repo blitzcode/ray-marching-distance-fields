@@ -14,6 +14,7 @@ import Control.Exception
 import Control.Lens
 import Control.Loop
 import Data.List
+import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
@@ -94,7 +95,7 @@ pixelAtBilinear img u v =
 
 -- Transform a latitude / longitude format environment map into a cube map texture. This
 -- creates some distortion and we only use basic bilinear lookups (no full texel coverage)
--- to do the resampling, introducing artifacts in the process
+-- for the resampling, introducing artifacts in the process. Results look fairly good, though
 latLongHDREnvMapToCubeMap :: JP.Image JP.PixelRGBF -> Bool -> IO GL.TextureObject
 latLongHDREnvMapToCubeMap latlong debugFaceColorize =
   bracketOnError
@@ -144,10 +145,10 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
--- Scale an HDR image to a given destination width (keep aspect for height). This is
--- certainly not the most sophisticated way to do image scaling and will produce poor
--- results for small changes in size and upscaling in general. For our actual use case
--- (downscaling an HDR environment map prior to convolution) its quality is adequate
+-- Scale an HDR image to a given target width (keep aspect for height). This is certainly
+-- not the most sophisticated way to do image scaling and will produce poor results for
+-- small changes in size and upscaling in general. For our actual use case (downscaling an
+-- HDR environment map prior to convolution) its quality is absolutely adequate
 resizeHDRImage :: JP.Image JP.PixelRGBF -> Int -> JP.Image JP.PixelRGBF
 resizeHDRImage src dstw =
   let srcw  = JP.imageWidth  src
@@ -199,24 +200,25 @@ cosineConvolveEnvMap src =
       pxToTheta p = fromIntegral p / fromIntegral (srch - 1) * pi
       pxToPhi   p = fromIntegral p / fromIntegral (srcw - 1) * 2 * pi
       convolve dstx dsty =
-        let thetaLobe    = pxToTheta dsty
-            thetaLobeCos = cos thetaLobe
-            thetaLobeSin = sin thetaLobe
-            phiLobe      = pxToPhi dstx
+        let thetaLobe           = pxToTheta dsty
+            thetaLobeCos        = cos thetaLobe
+            thetaLobeSin        = sin thetaLobe
+            phiLobe             = pxToPhi dstx
+            absPhiDiffCosLookup = VU.generate srcw (\x -> cos (abs $ phiLobe - pxToPhi x))
+            -- Divide sum by number of hemisphere samples
          in (\(r, g, b, n) -> JP.PixelRGBF (r / n) (g / n) (b / n)) $
               forLoopFold 0 (< srch) (+ 1) (0, 0, 0, 0) $ \accY y ->
                 let thetaPx    = pxToTheta y
                     thetaPxCos = cos thetaPx
                     thetaPxSin = sin thetaPx
                  in forLoopFold 0 (< srcw) (+ 1) accY $ \(!ar, !ag, !ab, !n) x ->
-                      let phiPx              = pxToPhi x
-                          JP.PixelRGBF r g b = JP.unsafePixelAt (JP.imageData src)
+                      let JP.PixelRGBF r g b = JP.unsafePixelAt (JP.imageData src)
                                                                 (x * 3 + y * srcw * 3)
                           -- Basically a dot product in spherical coordinates
                           -- http://en.wikipedia.org/wiki/Great-circle_distance#Formulas
                           cosAngle = thetaLobeCos * thetaPxCos +
-                                     thetaLobeSin * thetaPxSin * cos (abs $ phiLobe - phiPx)
-                                     :: Float
+                                     thetaLobeSin * thetaPxSin *
+                                     VU.unsafeIndex absPhiDiffCosLookup x
                           -- Sin theta factor to account for area distortion in the lat/long
                           -- parameterization of the sphere
                           fac = thetaPxSin * cosAngle
