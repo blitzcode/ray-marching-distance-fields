@@ -1,16 +1,18 @@
 
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, BangPatterns #-}
 
 module HDREnvMap ( loadHDRImage
                  , buildTestLatLongEnvMap
                  , cubeMapPixelToDir
                  , latLongHDREnvMapToCubeMap
                  , resizeHDRImage
+                 , cosineConvolveEnvMap
                  ) where
 
 import Control.Monad
 import Control.Exception
 import Control.Lens
+import Control.Loop
 import Data.List
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
@@ -186,17 +188,40 @@ resizeHDRImage src dstw =
 --       http://seblagarde.wordpress.com/2012/06/10/amd-cubemapgen-for-physically-based-rendering/
 --       https://code.google.com/p/cubemapgen/
 
--- http://en.wikipedia.org/wiki/Great-circle_distance#Formulas
--- cos(theta1 - theta2)*sin(phi1)*sin(phi2) + cos(phi1)*cos(phi2)
--- cos(psi) = sin(th1)*sin(th2)*cos(ph1-ph2) + cos(th1)*cos(th2)
--- s = rψ = r cos−1 (cos θ1 cosθ2 + sin θ1 sin θ2 cos(φ1 − φ2)).
-
--- Tasks
---
--- test cosine lobe in spherical coords generation
--- function taking JP latlong image and returning convolved version
---   Need to keep in mind that the lat/long representation is not an equal area mapping,
---   need to add a cos(theta) term (also see CDF inversion code in dexter)
--- compare convolution results to references we got
--- implement caching scheme for convolutions, consider even just caching the final cube maps
+-- Convolve an environment map with a cosine lobe. This is a rather slow operation. A resolution
+-- of 256x128 is both sufficient and probably the most that is computationally feasible
+cosineConvolveEnvMap :: JP.Image JP.PixelRGBF -> JP.Image JP.PixelRGBF
+cosineConvolveEnvMap src =
+  let srcw        = JP.imageWidth  src
+      srch        = JP.imageHeight src
+      -- We don't care about the actual correct angles as stored in the environment map,
+      -- only their difference matters
+      pxToTheta p = fromIntegral p / fromIntegral (srch - 1) * pi
+      pxToPhi   p = fromIntegral p / fromIntegral (srcw - 1) * 2 * pi
+      convolve dstx dsty =
+        let thetaLobe    = pxToTheta dsty
+            thetaLobeCos = cos thetaLobe
+            thetaLobeSin = sin thetaLobe
+            phiLobe      = pxToPhi dstx
+         in (\(r, g, b, n) -> JP.PixelRGBF (r / n) (g / n) (b / n)) $
+              forLoopFold 0 (< srch) (+ 1) (0, 0, 0, 0) $ \accY y ->
+                let thetaPx    = pxToTheta y
+                    thetaPxCos = cos thetaPx
+                    thetaPxSin = sin thetaPx
+                 in forLoopFold 0 (< srcw) (+ 1) accY $ \(!ar, !ag, !ab, !n) x ->
+                      let phiPx              = pxToPhi x
+                          JP.PixelRGBF r g b = JP.unsafePixelAt (JP.imageData src)
+                                                                (x * 3 + y * srcw * 3)
+                          -- Basically a dot product in spherical coordinates
+                          -- http://en.wikipedia.org/wiki/Great-circle_distance#Formulas
+                          cosAngle = thetaLobeCos * thetaPxCos +
+                                     thetaLobeSin * thetaPxSin * cos (abs $ phiLobe - phiPx)
+                                     :: Float
+                          -- Sin theta factor to account for area distortion in the lat/long
+                          -- parameterization of the sphere
+                          fac = thetaPxSin * cosAngle
+                       in if   cosAngle > 0
+                          then (ar + (r * fac), ag + (g * fac), ab + (b * fac), n + 1)
+                          else (ar, ag, ab, n)
+   in JP.generateImage convolve srcw srch
 
