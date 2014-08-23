@@ -13,6 +13,7 @@ import Control.DeepSeq
 import Control.Monad.Trans
 import Control.Monad.Except
 import Control.Monad.Trans.Resource
+import Control.Concurrent.Async
 import System.Directory
 import System.FilePath
 import Data.Monoid
@@ -59,7 +60,7 @@ withGPUFractal3D f = do
              shaderEnd <- liftIO getTick
              envStart <- liftIO getTick
              -- Load reflection environment map
-             let reflMapFn = "./latlong_envmaps/ennis.hdr"
+             let reflMapFn = "./latlong_envmaps/uffizi_gallery.hdr"
              reflMap <- either throwError return =<< liftIO (loadHDRImage reflMapFn)
                         -- Build debug environment map
                         -- return buildTestLatLongEnvMap
@@ -95,23 +96,20 @@ buildPreConvolvedHDREnvMapCache reflMap powfn = do
     -- Check if we have any pre-convolved files missing
     missing <- filterM (fmap not . doesFileExist . snd) powfn
     unless (null missing) $ do
-        traceS TLInfo $ printf "Missing %i pre-convolved environment map(s)" (length missing)
+        traceS TLInfo $ printf "Missing %i pre-convolved environment map(s), computing..."
+            (length missing)
         -- We compute the pre-convolved versions from a small, downsampled reflection map
         (timeResized, resized) <- timeIt . evaluate . force $ resizeHDRImage reflMap 256
         traceS TLInfo $ printf "Downsampled reflection environment in %.2fs" timeResized
-        -- Compute missing convolutions (TODO: Process in parallel)
-        forM_ missing $ \(pow, fn) -> do
-            traceS TLInfo $ printf
-                "Missing pre-convolved power %.1f version environment map '%s', computing..."
-                pow
-                fn
+        -- Compute missing convolutions in parallel
+        void $ flip mapConcurrently missing $ \(pow, fn) -> do
             (timeConvolved, convolved) <- timeIt . evaluate . force $
                 cosineConvolveHDREnvMap resized pow
-            traceS TLInfo $ printf "Computed in %.2fs" timeConvolved
+            traceS TLInfo $ printf "Computed power %.1f in %.2fs wallclock" pow timeConvolved
             (timeWritten, _) <- timeIt $ onException
                 (JP.saveRadianceImage fn . JP.ImageRGBF $ convolved)
                 (removeFile fn) -- Delete cache image file on error / cancellation
-            traceS TLInfo $ printf "Encoded and written to disk in %.2fs" timeWritten
+            traceS TLInfo $ printf "Written '%s' in %.2fs" (takeFileName fn) timeWritten
 
 drawGPUFractal3D :: GPUFractal3D -> FractalShader -> Int -> Int -> Double -> IO ()
 drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
