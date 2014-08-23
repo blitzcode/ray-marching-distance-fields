@@ -68,6 +68,7 @@ import QQPlainText
 -- TODO: Check out
 --       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
 -- TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
+-- TODO: Add some form of tone mapping to the output, exposure controls
 
 vsSrcFSQuad, fsSrcFractal :: B.ByteString
 
@@ -421,6 +422,36 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
     return min(kfinal, 1.0);
 }
 
+float fresnel_conductor( float fCosI // Cosine between normal and incident ray
+                       , float fEta  // Index of refraction
+                       , float fK    // Absorption coefficient
+                       )
+{
+    // Compute Fresnel term for a conductor, PBRT 1st edition p422
+
+    // Material | Eta   | K
+    // ------------------------
+    // Gold     | 0.370 | 2.820
+    // Silver   | 0.177 | 3.638
+    // Copper   | 0.617 | 2.63
+    // Steel    | 2.485 | 3.433
+
+    float fTmp = (fEta * fEta + fK * fK) * fCosI * fCosI;
+    float fRParallel2 =
+        (fTmp - (2.0 * fEta * fCosI) + 1.0) /
+        (fTmp + (2.0 * fEta * fCosI) + 1.0);
+    float fTmp_f = fEta * fEta + fK * fK;
+    float fRPerpend2 =
+        (fTmp_f - (2.0 * fEta * fCosI) + fCosI * fCosI) /
+        (fTmp_f + (2.0 * fEta * fCosI) + fCosI * fCosI);
+    return (fRParallel2 + fRPerpend2) / 2.0;
+}
+
+float normalize_phong_lobe(float power)
+{
+    return (power + 2) / 2;
+}
+
 vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 {
     // Ray march
@@ -469,31 +500,40 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 
         //if (gl_FragCoord.x < in_screen_wdh / 2)
 
+        vec3 color;
+
         // Shading
-        //vec3 color = vec3(((isec_n + 1) * 0.5) * ao);
-        //vec3 color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(ao));
-        //vec3 color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * vec3(ao);
-        /*vec3 color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
-                     clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
-        //vec3 color = (isec_n + 1) * 0.5;
-        //vec3 color = vec3(ao);
+        //color = vec3(((isec_n + 1) * 0.5) * ao);
+        //color = soft_lam(isec_n, normalize(vec3(1, 1, 1)), vec3(ao));
+        //color = ((dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz) +1) * 0.5 + 0.5) * vec3(ao);
+        /*color = clamp(dot(isec_n, vec3(0,0,1)), 0, 1) * vec3(1,0,0) +
+                clamp(dot(isec_n, vec3(0,0,-1)), 0, 1) * vec3(0,1,0);*/
+        //color = (isec_n + 1) * 0.5;
+        //color = vec3(ao);
         /*
-        vec3 color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.75) +
-                       vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
-                     ) * ao;
+        color = ( vec3(max(0, 0.2+dot(isec_n, normalize(vec3(1, 1, 1))))) * vec3(1,0.75,0.75) +
+                  vec3(max(0, 0.2+dot(isec_n, normalize(vec3(-1, -1, -1))))) * vec3(0.75,1.0,1.0)
+                ) * ao;
         */
         /*
-        vec3 color =
+        color =
         (
           max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*vec3(0.2)+
           vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,0,1))),5))) * vec3(1,0.4,0)*2 +
           vec3(max(0, pow(dot(reflect(dir,isec_n), normalize(vec3(1,-1,0))),5))) * vec3(0,.51,.51)*2
         ) * ao;
         */
-        vec3 color =
+
+        float fresnel = fresnel_conductor(dot(-dir, isec_n), 0.1, 1.638);
+        float diff_weight = 0.3;
+        float spec_weight = 1.0 - diff_weight;
+
+        color =
         (
-          max(0.2+dot(isec_n, (camera * vec4(0, 0, 1, 0)).xyz),0)*
-          texture(env_cos_8, reflect(dir,isec_n)).xyz*10
+          texture(env_cos_1, isec_n).xyz * diff_weight
+          +
+          texture(env_cos_8, reflect(dir, isec_n)).xyz * normalize_phong_lobe(8) * 2 * fresnel * spec_weight
+
         ) * ao;
 
         return color;
@@ -574,7 +614,7 @@ void main()
 #ifdef CAM_ORTHO
     generate_ray(camera, vec2(0, 0), true, 2.0, origin, dir);
 #else
-    generate_ray(camera, vec2(0, 0), false, 45.0 * 2, origin, dir);
+    generate_ray(camera, vec2(0, 0), false, 45.0 * 1.5, origin, dir);
 #endif
 
     // Trace and shade
