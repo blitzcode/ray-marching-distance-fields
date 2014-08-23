@@ -248,13 +248,28 @@ float distance_estimator(vec3 pos)
     return de_mandelbulb(pos);
 #else
     // Simple DE test scene
-    // float offset = 0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
-    return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
-             smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
-               smin(de_sphere(pos, 0.3),
-                 de_torus(pos, 0.8, 0.2),
-                   32), 32), 64);
-    // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
+    //#define DE_SCENE_A
+    #ifdef DE_SCENE_A
+        // float offset =
+        //  0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
+        return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
+                 smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
+                   smin(de_sphere(pos, 0.3),
+                     de_torus(pos, 0.8, 0.2),
+                       32), 32), 64);
+        // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
+    #else
+        float d_sphere = de_sphere(pos, 0.4);
+        float d_torus = smin(smin(
+                          de_torus(pos, 0.85, 0.1),
+                            de_torus(pos.zxy, 0.85, 0.1), 64),
+                              de_torus(pos.yzx, 0.85, 0.1), 64);
+        float d_box = smin(smin(
+                        de_rounded_box(pos, vec3(0.8, 0.06, 0.06), 0.03),
+                          de_rounded_box(pos, vec3(0.06, 0.8, 0.06), 0.03), 64),
+                            de_rounded_box(pos, vec3(0.06, 0.06, 0.8), 0.03), 64);
+        return smin(d_box, min(d_sphere, d_torus), 64);
+    #endif
 #endif
 }
 
