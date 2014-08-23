@@ -214,6 +214,8 @@ run = do
     -- Main loop
     let loop frameIdx = do
           asCurTick <~ liftIO getTick
+          tqGLFW <- view aeGLFWEventsQueue
+          processAllEvents tqGLFW processGLFWEvent
           -- GLFW / OpenGL
           draw
           liftIO $ {-# SCC swapAndPoll #-} do
@@ -222,8 +224,6 @@ run = do
               GLFW.swapBuffers window
               GLFW.pollEvents
               traceOnGLError $ Just "main loop"
-          tqGLFW <- view aeGLFWEventsQueue
-          processAllEvents tqGLFW processGLFWEvent
           -- Drop the first three frame deltas, they are often outliers
           when (frameIdx < 3) $ asFrameTimes %= BS.clear
           -- Done?
