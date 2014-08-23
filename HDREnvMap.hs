@@ -14,20 +14,39 @@ import Control.Exception
 import Control.Lens
 import Control.Loop
 import Data.List
+import Text.Printf
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
 import qualified Codec.Picture as JP
+import qualified Codec.Picture.Types as JPT
 import Linear
 
 import GLHelpers
 import CoordTransf
+import Trace
 
 loadHDRImage :: FilePath -> IO (Either String (JP.Image JP.PixelRGBF))
 loadHDRImage fn = do
     JP.readImage fn >>= \case
-        Right (JP.ImageRGBF img) -> return $ Right img
+        Right (JP.ImageRGBF img) -> do
+            -- Trace intensity bounds of the image
+            when (False) $
+                let (minIntensity, maxIntensity, avgIntensity) = JPT.pixelFold
+                      (\(!minI, !maxI, !avgI) _ _ (JP.PixelRGBF r g b) ->
+                           let int = (r + g + b) / 3
+                            in (min minI int, max maxI int, avgI + int)
+                      )
+                      (10000000, 0, 0)
+                      img
+                 in traceS TLInfo $ printf
+                        "Loaded HDR image '%s', min int: %f, max int: %f, avg int: %f"
+                        fn
+                        minIntensity
+                        maxIntensity
+                        (avgIntensity / (fromIntegral $ JP.imageWidth img * JP.imageHeight img))
+            return $ Right img
         Left err                 -> return $ Left err
         _                        -> return . Left  $ "Not an HDR RGBF image: " ++ fn
 
@@ -192,6 +211,11 @@ resizeHDRImage src dstw =
 -- Convolve an environment map with a cosine lobe. This is a rather slow O(n^4)
 -- operation. A resolution of 256x128 is both sufficient and probably the most
 -- that is computationally feasible
+--
+-- TODO: We add a lot of values together that might be either very small or very large.
+--       Analyze if the 32 bit intermediate floats, the 32 bit RGBE values in the HDR
+--       file and the RGB16F on the GPU are always sufficient
+--
 cosineConvolveHDREnvMap :: JP.Image JP.PixelRGBF -> Float -> JP.Image JP.PixelRGBF
 cosineConvolveHDREnvMap src power =
   let srcw        = JP.imageWidth  src
