@@ -44,15 +44,19 @@ import QQPlainText
 -- TODO: Move transformations into vertex shader, like here:
 --       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
 -- TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
--- TODO: See if we can maybe integrate AntTweakBar or similar
+-- TODO: Have an on-screen display of tweakable variables, allow run-time modification of
+--       all those little shader settings we tweak manually from the file for now. It
+--       would be OK to use a #define and recompile the shader if uniforms cause a slowdown
+--       for some settings
 -- TODO: Mouse control for orbiting camera
+-- TODO: Add key to show/hide UI overlay
 -- TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
 --       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
 -- TODO: Understand and try out some of the other DE methods from
 --       http://blog.hvidtfeldts.net/index.php/2011/09/
 --           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
--- TODO: Implement some more BRDFs besides Lambert, fresnel term, normalized / energy
---       preserving Phong, Blinn, etc.
+-- TODO: Implement some more BRDFs besides Phong/Lambert like Blinn, etc.
+-- TODO: Fresnel for dielectrics
 -- TODO: Collect epsilons and settings into one place
 -- TODO: Could try implementing SSS based on the distance_ao() function
 -- TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
@@ -422,9 +426,9 @@ vec3 soft_lam(vec3 n, vec3 light, vec3 surface_col)
     return min(kfinal, 1.0);
 }
 
-float fresnel_conductor( float fCosI // Cosine between normal and incident ray
-                       , float fEta  // Index of refraction
-                       , float fK    // Absorption coefficient
+float fresnel_conductor( float cosi // Cosine between normal and incident ray
+                       , float eta  // Index of refraction
+                       , float k    // Absorption coefficient
                        )
 {
     // Compute Fresnel term for a conductor, PBRT 1st edition p422
@@ -436,16 +440,91 @@ float fresnel_conductor( float fCosI // Cosine between normal and incident ray
     // Copper   | 0.617 | 2.63
     // Steel    | 2.485 | 3.433
 
-    float fTmp = (fEta * fEta + fK * fK) * fCosI * fCosI;
-    float fRParallel2 =
-        (fTmp - (2.0 * fEta * fCosI) + 1.0) /
-        (fTmp + (2.0 * fEta * fCosI) + 1.0);
-    float fTmp_f = fEta * fEta + fK * fK;
-    float fRPerpend2 =
-        (fTmp_f - (2.0 * fEta * fCosI) + fCosI * fCosI) /
-        (fTmp_f + (2.0 * fEta * fCosI) + fCosI * fCosI);
-    return (fRParallel2 + fRPerpend2) / 2.0;
+    float tmp = (eta * eta + k * k) * cosi * cosi;
+    float r_parallel_2 =
+        (tmp - (2.0 * eta * cosi) + 1.0) /
+        (tmp + (2.0 * eta * cosi) + 1.0);
+    float tmp_f = eta * eta + k * k;
+    float r_perpend_2 =
+        (tmp_f - (2.0 * eta * cosi) + cosi * cosi) /
+        (tmp_f + (2.0 * eta * cosi) + cosi * cosi);
+    return (r_parallel_2 + r_perpend_2) / 2.0;
 }
+
+/*
+double CRayTracer::FresnelTermDielectric(
+    double fCosI,               // Cosine between normal and incident ray
+    double fCosT,               // Cosine between normal and transmitted ray
+    double fEtaI,               // IOR of the incident media
+    double fEtaT)               // IOR of the transmitted media
+{
+    // Compute Fresnel term for a dielectric, PBRT p421
+    // TODO: Allow for wavelength dependency
+
+    const double fRParallel =
+        ((fEtaT * fCosI) - (fEtaI * fCosT)) /
+        ((fEtaT * fCosI) + (fEtaI * fCosT));
+    const double fRPerpend =
+        ((fEtaI * fCosI) - (fEtaT * fCosT)) /
+        ((fEtaI * fCosI) + (fEtaT * fCosT));
+    return (fRParallel * fRParallel + fRPerpend * fRPerpend) / 2.0;
+}
+
+void CRayTracer::FresnelDielectric(
+    const Ray& sRay,            // Ray which hit the specular reflective surface
+    const Intersection& sInt,   // Intersection on surface
+    Spectrum& spOut)            // Computed spectral radiance along the ray
+{
+    // Material at hit point
+    const Material *pMaterial = m_pScene->GetMaterialByID(sInt.iMaterialID);
+
+    // IOR for the incident and transmitted media
+    double fEtaI = sRay.fIOR;
+    double fEtaT = pMaterial->m_fIOR;
+
+    // Cosine of angle between incoming ray and surface normal
+    const double fCosI = Dot(-sRay.vDir , sInt.vNormal);
+    assert(fCosI >= -1.0 && fCosI <= 1.0f);
+
+    // Need to swap when at the other side of the interface
+    const bool bEntering = fCosI > 0.0;
+    if (!bEntering)
+        std::swap(fEtaI, fEtaT);
+
+    // Compute sine of the angle between refracted ray and the surface normal using Snell's law
+    const double fSinT = fEtaI / fEtaT * sqrt(__max(0.0, 1.0 - fCosI * fCosI));
+
+    // Need to reverse the surface normal for reflections when inside
+    Intersection sIntReversedN = sInt;
+    if (!bEntering)
+        sIntReversedN.vNormal *= -1.0;
+
+    // Handle total internal reflection
+    if (fSinT > 1.0)
+    {
+        // 100% reflection
+        SpecularReflection(sRay, sIntReversedN, spOut);
+        return;
+    }
+
+    // Compute cosine of the angle between refracted ray and the surface normal
+    double fCosT = sqrt(__max(0.0, 1.0f - fSinT * fSinT));
+
+    // Evaluate Fresnel term
+    double fFresnel = FresnelTermDielectric(abs(fCosI), fCosT, fEtaI, fEtaT);
+    assert(fFresnel >= 0.0 && fFresnel <= 1.0);
+
+    // Reflection
+    Spectrum spReflection(0.0f);
+    SpecularReflection(sRay, sIntReversedN, spReflection);
+
+    // Transmission
+    Spectrum spTransmission(0.0f);
+    SpecularTransmission(sRay, sInt, spTransmission);
+
+    spOut = spReflection * float(fFresnel) + float(1.0 - fFresnel) * spTransmission;
+}
+*/
 
 float normalize_phong_lobe(float power)
 {
@@ -524,17 +603,17 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         ) * ao;
         */
 
-        float fresnel = fresnel_conductor(dot(-dir, isec_n), 0.1, 1.638);
+        float fresnel = fresnel_conductor(dot(-dir, isec_n), 0.4, 1.9);
         float diff_weight = 0.3;
         float spec_weight = 1.0 - diff_weight;
 
         color =
         (
           texture(env_cos_1, isec_n).xyz * diff_weight
-          +
-          texture(env_cos_8, reflect(dir, isec_n)).xyz * normalize_phong_lobe(8) * 2 * fresnel * spec_weight
-
-        ) * ao;
+          + texture(env_cos_8, reflect(dir, isec_n)).xyz * normalize_phong_lobe(8) * fresnel * spec_weight
+          //+ texture(env_reflection, reflect(dir, isec_n)).xyz * spec_weight * fresnel
+        ) * ao * 5;
+        //color = vec3(fresnel);
 
         return color;
     }
