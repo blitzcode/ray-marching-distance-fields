@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
 
 module GPUFractal3D ( withGPUFractal3D
+                    , loadAndCompileShaders
                     , GPUFractal3D
                     , drawGPUFractal3D
                     , FractalShader(..)
@@ -45,22 +46,9 @@ withGPUFractal3D f = do
     -- Create, compile and link shaders, load resources
     r <- runExceptT . runResourceT $ do
              gfVAO <- genObjectNameResource
-             -- Fragment shader is loaded from a file
-             shaderStart <- liftIO getTick
-             fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
-                 =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
-             -- Generate several shader variations through GLSL's pre-processor
-             [gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
-                forM [ ""
-                     , "#define MANDELBULB_SCENE\n#define POWER8\n"
-                     , "#define MANDELBULB_SCENE\n"
-                     ]
-                     $ \defines -> let src = "#version 330 core\n" <> defines <> fsSrc
-                                    in tryMkShaderResource $ mkShaderProgram vsSrcFSQuad src []
-             shaderEnd <- liftIO getTick
-             envStart <- liftIO getTick
              -- Load reflection environment map
-             let reflMapFn = "./latlong_envmaps/uffizi_gallery.hdr"
+             envStart <- liftIO getTick
+             let reflMapFn = "./latlong_envmaps/uffizi-large.hdr"
              reflMap <- either throwError return =<< liftIO (loadHDRImage reflMapFn)
                         -- Build debug environment map
                         -- return buildTestLatLongEnvMap
@@ -83,13 +71,40 @@ withGPUFractal3D f = do
              -- Add regular reflection environment map and store in record
              reflCubeMap <- convertAndAllocCM reflMap
              let gfEnvCubeMaps = ("env_reflection", reflCubeMap) : envCubeMaps
-             -- Statistics
              envEnd <- liftIO getTick
+             -- Create fragment shaders
+             [gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
+                 forM ([0..2] :: [Int]) $ \_ ->
+                     snd <$> allocate GL.createProgram GL.deleteObjectName
+             -- Record
+             let gpuFractal3D = GPUFractal3D { .. }
+             -- Shaders
+             shaderTime <- either throwError return
+                               =<< liftIO (loadAndCompileShaders gpuFractal3D)
+             -- Statistics
              liftIO . traceS TLInfo $ printf
                 "withGPUFractal3D - Shader time: %.2fs, EnvMap time: %.2fs"
-                (shaderEnd - shaderStart) (envEnd - envStart)
-             liftIO $ f GPUFractal3D { .. }
+                shaderTime (envEnd - envStart)
+             liftIO $ f gpuFractal3D
     either (traceAndThrow . printf "withGPUFractal3D - Init failed:\n%s") return r
+
+loadAndCompileShaders :: GPUFractal3D -> IO (Either String Double)
+loadAndCompileShaders GPUFractal3D { .. } = runExceptT $ do
+    -- Fragment shader is loaded from a file
+    shaderStart <- liftIO getTick
+    fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
+                 =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
+    -- Generate several shader variations through GLSL's pre-processor
+    forM_ [ (gfDETestShd   , ""                                          )
+          , (gfMBPower8Shd , "#define MANDELBULB_SCENE\n#define POWER8\n")
+          , (gfMBGeneralShd, "#define MANDELBULB_SCENE\n"                )
+          ]
+          $ \(shd, defines) ->
+                let src = "#version 330 core\n" <> defines <> fsSrc
+                 in either throwError return =<<
+                        liftIO (compileShaderProgram vsSrcFSQuad src [] shd)
+    shaderEnd <- liftIO getTick
+    return $ shaderEnd - shaderStart -- Return shader load, compile and link time
 
 buildPreConvolvedHDREnvMapCache :: JP.Image JP.PixelRGBF -> [(Float, FilePath)] -> IO ()
 buildPreConvolvedHDREnvMapCache reflMap powfn = do
