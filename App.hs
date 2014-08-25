@@ -102,6 +102,11 @@ processGLFWEvent ev =
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
+                GLFW.Key'R     -> do view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
+                                       \case Left err -> liftIO . traceS TLError $
+                                                           "Failed to reload shaders:\n" ++ err
+                                             Right s  -> liftIO . traceS TLInfo $
+                                                           printf "Reloaded shaders in %.2fs" s
                 _              -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
@@ -173,8 +178,8 @@ draw = do
             ftStr <- updateAndReturnFrameTimes
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
-                printf ( "Mode %i of %i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n" ++
-                         "FB Sca[l]e: %fx, Dim %ix%i | %s"
+                printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit | " ++
+                         "[R]eload Shd.\nFB Sca[l]e: %fx, Dim %ix%i | %s"
                        )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
