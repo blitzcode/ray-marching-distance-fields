@@ -45,9 +45,9 @@ withGPUFractal3D f = do
     -- Create, compile and link shaders, load resources
     r <- runExceptT . runResourceT $ do
              gfVAO <- genObjectNameResource
-             -- Build-in fragment shader can be overridden with a file
+             -- Fragment shader is loaded from a file
              shaderStart <- liftIO getTick
-             fsSrc <- either (\(_ :: IOException) -> return fsSrcFractal) return
+             fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
                  =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
              -- Generate several shader variations through GLSL's pre-processor
              [gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
