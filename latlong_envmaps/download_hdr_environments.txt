@@ -1,0 +1,7 @@
+
+There are plenty of free HDR environment maps in the supported lat/long format available here:
+
+http://gl.ict.usc.edu/Data/HighResProbes/
+http://www.hdrlabs.com/sibl/archive.html
+http://www.hdri-hub.com/free-hdri-environments-for-download
+
