@@ -1,7 +1,8 @@
 
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, LambdaCase #-}
 
 module Shaders ( mkShaderProgram
+               , compileShaderProgram
                , tryMkShaderResource
                , setTextureShader
                , setOrtho2DProjMatrix
@@ -26,26 +27,34 @@ mkShaderProgram :: B.ByteString
                 -> [(String, GL.AttribLocation)]
                 -> IO (Either String GL.Program)
 mkShaderProgram vsSrc fsSrc attribLocations =
-    -- Always delete the shaders (don't need them after linking), only delete the program
-    -- on error
-    bracket        (GL.createShader GL.VertexShader  ) (GL.deleteObjectName) $ \shdVtx  ->
-    bracket        (GL.createShader GL.FragmentShader) (GL.deleteObjectName) $ \shdFrag ->
-    bracketOnError (GL.createProgram                 ) (GL.deleteObjectName) $ \shdProg -> do
-        r <- runExceptT $ do
-                 compile shdVtx  vsSrc
-                 compile shdFrag fsSrc
-                 liftIO $ GL.attachShader shdProg shdVtx >> GL.attachShader shdProg shdFrag
-                 -- Need to specify attribute locations before we link
-                 liftIO . forM_ attribLocations $
-                     \(name, loc) -> GL.attribLocation shdProg name GL.$= loc
-                 link shdProg
-                 liftIO $ GL.detachShader shdProg shdVtx >> GL.detachShader shdProg shdFrag
-                 return shdProg
-        -- The bracket only deletes in case of an exception, still need to delete manually
-        -- in case of a monadic error
-        when (null $ rights [r]) $ GL.deleteObjectName shdProg
-        traceOnGLError $ Just "mkShaderProgam end"
-        return r
+    -- Only delete the program on error
+    bracketOnError GL.createProgram GL.deleteObjectName $ \shdProg -> do
+        compileShaderProgram vsSrc fsSrc attribLocations shdProg >>=
+            \case Left err -> do -- The bracket only deletes in case of an exception,
+                                 -- still need to delete manually in case of a monadic error
+                                 GL.deleteObjectName shdProg
+                                 return $ Left err
+                  Right () -> return $ Right shdProg
+
+compileShaderProgram :: B.ByteString
+                     -> B.ByteString
+                     -> [(String, GL.AttribLocation)]
+                     -> GL.Program
+                     -> IO (Either String ())
+compileShaderProgram vsSrc fsSrc attribLocations shdProg =
+    -- Delete the shaders (don't need them after linking)
+    bracket (GL.createShader GL.VertexShader  ) (GL.deleteObjectName) $ \shdVtx  ->
+    bracket (GL.createShader GL.FragmentShader) (GL.deleteObjectName) $ \shdFrag ->
+        runExceptT $ do
+            compile shdVtx  vsSrc
+            compile shdFrag fsSrc
+            liftIO $ GL.attachShader shdProg shdVtx >> GL.attachShader shdProg shdFrag
+            -- Need to specify attribute locations before we link
+            liftIO . forM_ attribLocations $
+                \(name, loc) -> GL.attribLocation shdProg name GL.$= loc
+            link shdProg
+            liftIO $ GL.detachShader shdProg shdVtx >> GL.detachShader shdProg shdFrag
+            liftIO . traceOnGLError $ Just "compileShaderProgram end"
     -- Compile and link helpers
     where compile shd src = do
               liftIO $ do GL.shaderSourceBS shd GL.$= src
