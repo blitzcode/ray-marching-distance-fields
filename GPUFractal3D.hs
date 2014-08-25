@@ -130,10 +130,7 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
            uniformFloat "in_time"       $ realToFrac time
     -- Setup environment cube maps
     forM_ (zip gfEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
-        (GL.get $ GL.uniformLocation shd uniformName) >>= \loc ->
-            GL.uniform loc GL.$= GL.Index1      (fromIntegral tuIdx :: GL.GLint)
-        GL.activeTexture   GL.$= GL.TextureUnit (fromIntegral tuIdx)
-        GL.textureBinding GL.TextureCubeMap GL.$= Just tex
+        setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
     -- Draw fullscreen quad. Don't need any VBO etc, the vertex shader will make this a
     -- proper quad. Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)

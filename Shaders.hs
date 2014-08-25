@@ -78,12 +78,18 @@ tryMkShaderResource :: (MonadError String m, MonadIO m, MonadResource m)
 tryMkShaderResource f =
     allocate f (GL.deleteObjectNames . rights . (: [])) >>= (either throwError return . snd)
 
-setTextureShader :: GL.TextureObject -> Int -> GL.Program -> String -> IO ()
-setTextureShader tex tu prog uname = do
+setTextureShader :: GL.BindableTextureTarget t
+                 => GL.TextureObject
+                 -> t
+                 -> Int
+                 -> GL.Program
+                 -> String
+                 -> IO ()
+setTextureShader tex target tu prog uname = do
     (GL.get $ GL.uniformLocation prog uname) >>= \loc ->
-        GL.uniform loc             GL.$= GL.Index1 (fromIntegral tu :: GL.GLint)
-    GL.activeTexture               GL.$= GL.TextureUnit (fromIntegral tu)
-    GL.textureBinding GL.Texture2D GL.$= Just tex
+        GL.uniform loc       GL.$= GL.Index1 (fromIntegral tu :: GL.GLint)
+    GL.activeTexture         GL.$= GL.TextureUnit (fromIntegral tu)
+    GL.textureBinding target GL.$= Just tex
 
 setOrtho2DProjMatrix :: GL.Program -> String -> Int -> Int -> IO ()
 setOrtho2DProjMatrix prog uniform w h = do
