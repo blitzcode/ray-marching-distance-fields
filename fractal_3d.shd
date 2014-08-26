@@ -1,9 +1,9 @@
 
 // Shaders for ray marching distance estimated fractals
 //
-// --------------------
-// References & Sources
-// --------------------
+// -------------------------
+// Main References & Sources
+// -------------------------
 //
 // http://blog.hvidtfeldts.net/index.php/2011/06/distance-estimated-3d-fractals-part-i/
 //
@@ -63,6 +63,8 @@
 // TODO: Add some form of tone mapping to the output, exposure controls
 // TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
 //       directional visibility information
+// TODO: Cornell box scene
+// TODO: distance_ao() still needs work, contribution of first sphere is just error
 
 // '#version 330 core' defined externally when we generate variations of this shader
 
@@ -357,7 +359,7 @@ bool ray_march( vec3 origin
     // First intersect with a bounding sphere. Helps quickly reject rays which can't
     // possibly intersect with the scene and brings our starting point closer
     // to the surface (DEs get very imprecise when we're starting to far away)
-    const float b_sphere_r = 
+    const float b_sphere_r =
 #ifdef MANDELBULB_SCENE
     #ifdef POWER8
         1.25;
@@ -472,10 +474,10 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
 
         // TODO: We can fix some numerical problems when computing normals by switching to
-        //       screen-space normals when very thin, fin-like surfaces causes errors. This
-        //       is most noticeable for some of the lower powers of the mandelbulb, but unfortunately
-        //       those surfaces are so disjoint that they also causes issues for our distanced
-        //       based AO computations
+        //       screen-space normals when very thin, fin-like surfaces causes errors. This is
+        //       most noticeable for some of the lower powers of the mandelbulb, but
+        //       unfortunately those surfaces are so disjoint that they also causes issues for
+        //       our distanced based AO computations
         //
         // vec3 isec_n_ss = normal_screen_space_isec(isec_pos);
         // if (dot(-dir, isec_n) < 0.0) // Clearly wrong normal?
@@ -565,7 +567,8 @@ void generate_ray( mat4x4 camera       // Camera transform
     float aspect = in_screen_wdh / in_screen_hgt;
     if (ortho)
     {
-        // Orthographic projection. Frame [-w/2, w/2] on X, center interval on Y while keeping aspect
+        // Orthographic projection. Frame [-w/2, w/2] on X,
+        // center interval on Y while keeping aspect
         float width  = width_or_hfov;
         float height = width / aspect;
         origin       = (camera * vec4(ndc * vec2(width / 2.0, height / 2.0), 0, 1)).xyz;
