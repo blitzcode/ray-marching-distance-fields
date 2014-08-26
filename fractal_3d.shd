@@ -206,6 +206,59 @@ float de_mandelbulb(vec3 pos)
     return 0.5 * log(r) * r / dr;
 }
 
+bool intersect_triangle(vec3 orig, vec3 dir,
+                        vec3 vert0, vec3 vert1, vec3 vert2,
+                        out float t, out float u, out float v)
+{
+    // Fast, Minimum Storage Ray-Triangle Intersection
+    //
+    // Tomas Möller and Ben Trumbore. Fast, minimum storage ray-triangle intersection.
+    // Journal of graphics tools, 2(1):21-28, 1997
+    //
+    // http://www.jcenligne.fr/download/little3d/
+    //     jgt%20Fast,%20Minumum%20Storage%20Ray-Triangle%20Intersection.htm
+
+    const float JGT_RAYTRI_EPSILON = 0.000001;
+
+    vec3 edge1, edge2, tvec, pvec, qvec;
+    float det, inv_det;
+
+    // Find vectors for two edges sharing vert0
+    edge1 = vert1 - vert0;
+    edge2 = vert2 - vert0;
+
+    // Begin calculating determinant - also used to calculate U parameter
+    pvec = cross(dir, edge2);
+
+    // If determinant is near zero, ray lies in plane of triangle
+    det = dot(edge1, pvec);
+
+    if (det > -JGT_RAYTRI_EPSILON && det < JGT_RAYTRI_EPSILON)
+      return false;
+    inv_det = 1.0 / det;
+
+    // Calculate distance from vert0 to ray origin
+    tvec = orig - vert0;
+
+    // Calculate U parameter and test bounds
+    u = dot(tvec, pvec) * inv_det;
+    if (u < 0.0 || u > 1.0)
+      return false;
+
+    // Prepare to test V parameter
+    qvec = cross(tvec, edge1);
+
+    // Calculate V parameter and test bounds
+    v = dot(dir, qvec) * inv_det;
+    if (v < 0.0 || u + v > 1.0)
+      return false;
+
+    // Calculate t, ray intersects triangle
+    t = dot(edge2, qvec) * inv_det;
+
+    return true;
+}
+
 float smin(float a, float b, float k)
 {
     // http://iquilezles.org/www/articles/smin/smin.htm
