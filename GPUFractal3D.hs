@@ -30,12 +30,14 @@ import GLHelpers
 import Shaders
 import GPUFractal3DShaderSource
 import HDREnvMap
+import CornellBox
 
-data GPUFractal3D = GPUFractal3D { gfVAO          :: !GL.VertexArrayObject
-                                 , gfDETestShd    :: !GL.Program
-                                 , gfMBPower8Shd  :: !GL.Program
-                                 , gfMBGeneralShd :: !GL.Program
-                                 , gfEnvCubeMaps  :: [(String, GL.TextureObject)]
+data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
+                                 , gfDETestShd         :: !GL.Program
+                                 , gfMBPower8Shd       :: !GL.Program
+                                 , gfMBGeneralShd      :: !GL.Program
+                                 , gfEnvCubeMaps       :: [(String, GL.TextureObject)]
+                                 , gfCornellBoxGeomTex :: !GL.TextureObject
                                  }
 
 data FractalShader = FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
@@ -76,6 +78,9 @@ withGPUFractal3D f = do
              [gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
                  forM ([0..2] :: [Int]) $ \_ ->
                      snd <$> allocate GL.createProgram GL.deleteObjectName
+             -- Cornell box geometry texture
+             gfCornellBoxGeomTex <-
+                snd <$> allocate mkCornellBoxVerticesTex GL.deleteObjectName
              -- Record
              let gpuFractal3D = GPUFractal3D { .. }
              -- Shaders
@@ -146,6 +151,8 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
     -- Setup environment cube maps
     forM_ (zip gfEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
         setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
+    -- Cornell box geometry texture
+    setTextureShader gfCornellBoxGeomTex GL.Texture1D (length gfEnvCubeMaps) shd "cornell_geom"
     -- Draw fullscreen quad. Don't need any VBO etc, the vertex shader will make this a
     -- proper quad. Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)

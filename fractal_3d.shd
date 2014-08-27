@@ -78,6 +78,8 @@ uniform samplerCube env_cos_8;
 uniform samplerCube env_cos_64;
 uniform samplerCube env_cos_512;
 
+uniform sampler1D cornell_geom;
+
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
