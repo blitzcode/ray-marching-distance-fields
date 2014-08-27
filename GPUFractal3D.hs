@@ -101,10 +101,10 @@ loadAndCompileShaders GPUFractal3D { .. } = runExceptT $ do
     fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
                  =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
     -- Generate several shader variations through GLSL's pre-processor
-    forM_ [ (gfDECornellBoxShd   , "#define CORNELL_BOX_SCENE"                 )
-          , (gfDETestShd         , ""                                          )
-          , (gfMBPower8Shd       , "#define MANDELBULB_SCENE\n#define POWER8\n")
-          , (gfMBGeneralShd      , "#define MANDELBULB_SCENE\n"                )
+    forM_ [ (gfDECornellBoxShd, "#define CORNELL_BOX_SCENE"                 )
+          , (gfDETestShd      , ""                                          )
+          , (gfMBPower8Shd    , "#define MANDELBULB_SCENE\n#define POWER8\n")
+          , (gfMBGeneralShd   , "#define MANDELBULB_SCENE\n"                )
           ]
           $ \(shd, defines) ->
                 let src = "#version 330 core\n" <> defines <> fsSrc

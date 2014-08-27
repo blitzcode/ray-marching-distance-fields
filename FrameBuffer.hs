@@ -33,8 +33,9 @@ import GLHelpers
 import QuadRendering
 import Trace
 
--- Simple 'frame buffer' interface where we can directly write into an RGBA8 vector and have
--- it appear on screen. Uses PBOs to allow writes to a texture drawn as a full screen quad
+-- Simple 'frame buffer' interface where we can either directly write into an RGBA8 vector CPU
+-- side or render into a texture with the GPU and have it appear on screen, optionally with
+-- super sampling
 
 data FrameBuffer = FrameBuffer { fbTex         :: !GL.TextureObject
                                , fbPBO         :: !GL.BufferObject

@@ -224,6 +224,8 @@ bool intersect_triangle( vec3 orig
     //
     // http://www.jcenligne.fr/download/little3d/
     //     jgt%20Fast,%20Minumum%20Storage%20Ray-Triangle%20Intersection.htm
+    //
+    // TODO: Currently not used
 
     const float JGT_RAYTRI_EPSILON = 0.000001;
 
