@@ -26,13 +26,15 @@ mkCornellBoxVerticesTex =
         let numQuad = V.length cornellBox `div` 4
             numTri  = numQuad * 2
             numVtx  = numTri * 3
+            toUnit  = 559.2 / 2
+            scale   = 1 / (sqrt (2 * 2 + 2 * 2 + 2 * 2) / 2) * 0.99
             vtx     = flip concatMap [0..numQuad - 1] $ \quadIdx ->
-                          [ (cornellBox V.! (quadIdx * 4 + 0)) / 560 - 0.5
-                          , (cornellBox V.! (quadIdx * 4 + 1)) / 560 - 0.5
-                          , (cornellBox V.! (quadIdx * 4 + 3)) / 560 - 0.5
-                          , (cornellBox V.! (quadIdx * 4 + 3)) / 560 - 0.5
-                          , (cornellBox V.! (quadIdx * 4 + 1)) / 560 - 0.5
-                          , (cornellBox V.! (quadIdx * 4 + 2)) / 560 - 0.5
+                          [ ((cornellBox V.! (quadIdx * 4 + 0)) / toUnit - 1) ^* scale
+                          , ((cornellBox V.! (quadIdx * 4 + 1)) / toUnit - 1) ^* scale
+                          , ((cornellBox V.! (quadIdx * 4 + 3)) / toUnit - 1) ^* scale
+                          , ((cornellBox V.! (quadIdx * 4 + 3)) / toUnit - 1) ^* scale
+                          , ((cornellBox V.! (quadIdx * 4 + 1)) / toUnit - 1) ^* scale
+                          , ((cornellBox V.! (quadIdx * 4 + 2)) / toUnit - 1) ^* scale
                           ]
          in withArray vtx $ GL.texImage1D GL.Texture1D
                                           GL.NoProxy
