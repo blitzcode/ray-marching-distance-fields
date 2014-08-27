@@ -100,7 +100,7 @@ processGLFWEvent ev =
                 GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
                 GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
                 GLFW.Key'L
-                    | GLFW.modifierKeysShift mk -> asFBScale %= min 8     . (* 2) >> resize
+                    | GLFW.modifierKeysShift mk -> asFBScale %= min 16    . (* 2) >> resize
                     | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
