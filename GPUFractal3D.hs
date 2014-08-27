@@ -156,9 +156,20 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
         setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
     -- Cornell box geometry texture
     setTextureShader gfCornellBoxGeomTex GL.Texture1D (length gfEnvCubeMaps) shd "cornell_geom"
-    -- Draw fullscreen quad. Don't need any VBO etc, the vertex shader will make this a
-    -- proper quad. Specify one dummy attribute, as some drivers apparently have an issue
+    -- Don't need any VBO etc, the vertex shader will make this a proper quad.
+    -- Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)
     GLR.glVertexAttrib1f 0 0
-    GL.drawArrays GL.TriangleStrip 0 4
+    -- Draw the full screen quad in tiles to prevent shader timeouts when we're rendering
+    -- very complex images or very high resolution
+    let tilesx = 1 :: Int
+        tilesy = 1 :: Int
+    forM_ [0..tilesy - 1] $ \y -> forM_ [0..tilesx - 1] $ \x -> do
+        GL.get (GL.uniformLocation shd "quad") >>= \(GL.UniformLocation loc) ->
+            GLR.glUniform4f loc
+                (-1 + fromIntegral  x      / fromIntegral tilesx * 2)
+                (-1 + fromIntegral  y      / fromIntegral tilesy * 2)
+                (-1 + fromIntegral (x + 1) / fromIntegral tilesx * 2)
+                (-1 + fromIntegral (y + 1) / fromIntegral tilesy * 2)
+        GL.drawArrays GL.TriangleStrip 0 4
 
