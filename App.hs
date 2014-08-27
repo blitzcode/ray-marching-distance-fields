@@ -23,6 +23,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
 import Data.Time
+import Data.List
 
 import GLFWHelpers
 import GLHelpers
@@ -50,6 +51,7 @@ data AppState = AppState { _asCurTick      :: !Double
                          , _asFrameTimes   :: BS.BoundedSequence Double
                          , _asMode         :: !Mode
                          , _asFBScale      :: !Float
+                         , _asLastShdErr   :: !String
                          }
 
 data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
@@ -104,10 +106,12 @@ processGLFWEvent ev =
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
                 GLFW.Key'R     -> do view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
-                                       \case Left err -> liftIO . traceS TLError $
-                                                           "Failed to reload shaders:\n" ++ err
-                                             Right s  -> liftIO . traceS TLInfo $
-                                                           printf "Reloaded shaders in %.2fs" s
+                                       \case Left err -> do liftIO . traceS TLError $
+                                                              "Failed to reload shaders:\n" ++ err
+                                                            asLastShdErr .= err
+                                             Right s  -> do liftIO . traceS TLInfo $
+                                                              printf "Reloaded shaders in %.2fs" s
+                                                            asLastShdErr .= ""
                 _              -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
@@ -190,6 +194,31 @@ draw = do
                        fbWdh
                        fbHgt
                        ftStr
+            -- Display any shader compilation errors from the last reload in a text overlay
+            unless (null _asLastShdErr) $
+                let wrap    =   concat
+                              . intersperse "\n"
+                              . map (foldr (\(i, c) str -> if   i > 0 && i `mod` lineWdh == 0
+                                                           then c : '\n' : str
+                                                           else c : str
+                                           ) "" . zip ([0..] :: [Int])
+                                    )
+                              . filter (/= "\n")
+                              . filter (/= "\0") -- No idea why that's in there...
+                              . groupBy (\a b -> a /= '\n' && b /= '\n')
+                              $ _asLastShdErr
+                    lineWdh = (w - 20) `div` 6 - 1
+                    errHgt  = (+ 3) . (* 11) . succ . length . filter (== '\n') $ wrap
+                    errY    = h `div` 2 + errHgt `div` 2
+                 in liftIO $ do drawTextWithShadow _aeFontTexture qb 10 (errY - 12) wrap
+                                drawQuad qb
+                                         7                      (fromIntegral errY)
+                                         (fromIntegral $ w - 7) (fromIntegral $ errY - errHgt)
+                                         2
+                                         FCBlack
+                                         (TRBlend 0.5)
+                                         Nothing
+                                         QuadUVDefault
 
 updateAndReturnFrameTimes :: MonadState AppState m => m String
 updateAndReturnFrameTimes = do
