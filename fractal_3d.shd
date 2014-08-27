@@ -1,6 +1,6 @@
 
 // Shaders for ray marching distance estimated fractals
-//
+
 // -------------------------
 // Main References & Sources
 // -------------------------
@@ -207,9 +207,15 @@ float de_mandelbulb(vec3 pos)
     return 0.5 * log(r) * r / dr;
 }
 
-bool intersect_triangle(vec3 orig, vec3 dir,
-                        vec3 vert0, vec3 vert1, vec3 vert2,
-                        out float t, out float u, out float v)
+bool intersect_triangle( vec3 orig
+                       , vec3 dir
+                       , vec3 vert0
+                       , vec3 vert1
+                       , vec3 vert2
+                       , out float t
+                       , out float u
+                       , out float v
+                       )
 {
     // Fast, Minimum Storage Ray-Triangle Intersection
     //
@@ -541,24 +547,22 @@ float smin(float a, float b, float k)
 
 float distance_estimator(vec3 pos)
 {
-#ifdef MANDELBULB_SCENE
-    #define DE_SCENE 0
-#else
-    #define DE_SCENE 2
-#endif
-
-#if DE_SCENE == 0
+#if defined(MANDELBULB_SCENE)
     return de_mandelbulb(pos);
-#elif DE_SCENE == 1
+#elif defined(CORNELL_BOX_SCENE)
+    return de_cornell_box(pos);
+#else
     // float offset =
     //  0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
+    // return de_triangle(pos, vec3(-0.25, -0.25, 0), vec3(0.25, -0.25, 0), vec3(0, 0.25, 0));
+    /*
     return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
              smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
                smin(de_sphere(pos, 0.3),
                  de_torus(pos, 0.8, 0.2),
                    32), 32), 64);
+    */
     // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
-#elif DE_SCENE == 2
     float d_sphere = de_sphere(pos, 0.4);
     float d_torus = smin(smin(
                       de_torus(pos, 0.85, 0.1),
@@ -569,11 +573,6 @@ float distance_estimator(vec3 pos)
                       de_rounded_box(pos, vec3(0.06, 0.8, 0.06), 0.03), 64),
                         de_rounded_box(pos, vec3(0.06, 0.06, 0.8), 0.03), 64);
     return smin(d_box, min(d_sphere, d_torus), 64);
-    //return de_triangle(pos, vec3(-0.25, -0.25, 0), vec3(0.25, -0.25, 0), vec3(0, 0.25, 0));
-#elif DE_SCENE == 3
-    return de_cornell_box(pos);
-#else
-    return 0;
 #endif
 }
 
@@ -804,6 +803,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         // in screen-space) did not improve results
         //
         vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
+        // vec3 isec_n = normal_screen_space_isec(isec_pos);
 
         // TODO: We can fix some numerical problems when computing normals by switching to
         //       screen-space normals when very thin, fin-like surfaces causes errors. This is
@@ -925,12 +925,18 @@ void main()
     vec3 cam_pos = vec3(0,0,2);
 #define AUTO_ROTATION
 #ifdef AUTO_ROTATION
-    cam_pos.x = sin(in_time / 3.0);
-    cam_pos.z = cos(in_time / 3.0);
-    cam_pos.y = cos(in_time / 4.0);
-    // Keep a constant distance. Distance is so that a width = 2 orthographic projection
-    // matches up with a HFOV = 45 perspective projection as close as possible
-    cam_pos = normalize(cam_pos) * 2.414213562373095;
+    #ifdef CORNELL_BOX_SCENE
+        cam_pos.x = sin(in_time / 2) * 0.4;
+        cam_pos.z = -2;
+        cam_pos.y = cos(in_time / 2) * 0.4;
+    #else
+        cam_pos.x = sin(in_time / 3.0);
+        cam_pos.z = cos(in_time / 3.0);
+        cam_pos.y = cos(in_time / 4.0);
+        // Keep a constant distance. Distance is so that a width = 2 orthographic projection
+        // matches up with a HFOV = 45 perspective projection as close as possible
+        cam_pos = normalize(cam_pos) * 2.414213562373095;
+    #endif
 #endif
 
     // Camera transform. Look at center, orbit around it

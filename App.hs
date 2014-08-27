@@ -39,6 +39,7 @@ data Mode = ModeMandelBrot
           | ModeMandelBrotSmooth
           | ModeJuliaAnim
           | ModeJuliaAnimSmooth
+          | ModeDECornellBoxShader
           | ModeDETestShader
           | ModeMBPower8Shader
           | ModeMBGeneralShader
@@ -154,13 +155,14 @@ draw = do
         drawFB             = void . drawIntoFrameBuffer _aeFB
         drawGPUFractal shd w h = drawGPUFractal3D _aeGPUFrac3D shd w h _asCurTick
      in liftIO $ case _asMode of
-        ModeJuliaAnim        -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
-        ModeJuliaAnimSmooth  -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
-        ModeMandelBrot       -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
-        ModeMandelBrotSmooth -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
-        ModeDETestShader     -> drawFB $ \w h       -> drawGPUFractal FSDETestShader    w h
-        ModeMBPower8Shader   -> drawFB $ \w h       -> drawGPUFractal FSMBPower8Shader  w h
-        ModeMBGeneralShader  -> drawFB $ \w h       -> drawGPUFractal FSMBGeneralShader w h
+        ModeJuliaAnim          -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
+        ModeJuliaAnimSmooth    -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
+        ModeMandelBrot         -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
+        ModeMandelBrotSmooth   -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
+        ModeDECornellBoxShader -> drawFB $ \w h       -> drawGPUFractal FSDECornellBoxShader w h
+        ModeDETestShader       -> drawFB $ \w h       -> drawGPUFractal FSDETestShader       w h
+        ModeMBPower8Shader     -> drawFB $ \w h       -> drawGPUFractal FSMBPower8Shader     w h
+        ModeMBGeneralShader    -> drawFB $ \w h       -> drawGPUFractal FSMBGeneralShader    w h
     -- Render everything quad based
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do

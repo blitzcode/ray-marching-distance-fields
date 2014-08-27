@@ -33,6 +33,7 @@ import HDREnvMap
 import CornellBox
 
 data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
+                                 , gfDECornellBoxShd   :: !GL.Program
                                  , gfDETestShd         :: !GL.Program
                                  , gfMBPower8Shd       :: !GL.Program
                                  , gfMBGeneralShd      :: !GL.Program
@@ -40,7 +41,7 @@ data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
                                  , gfCornellBoxGeomTex :: !GL.TextureObject
                                  }
 
-data FractalShader = FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
+data FractalShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
                      deriving (Show, Eq, Enum)
 
 withGPUFractal3D :: (GPUFractal3D -> IO a) -> IO a
@@ -75,8 +76,8 @@ withGPUFractal3D f = do
              let gfEnvCubeMaps = ("env_reflection", reflCubeMap) : envCubeMaps
              envEnd <- liftIO getTick
              -- Create fragment shaders
-             [gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
-                 forM ([0..2] :: [Int]) $ \_ ->
+             [gfDECornellBoxShd, gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
+                 forM ([0..3] :: [Int]) $ \_ ->
                      snd <$> allocate GL.createProgram GL.deleteObjectName
              -- Cornell box geometry texture
              gfCornellBoxGeomTex <-
@@ -100,9 +101,10 @@ loadAndCompileShaders GPUFractal3D { .. } = runExceptT $ do
     fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
                  =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
     -- Generate several shader variations through GLSL's pre-processor
-    forM_ [ (gfDETestShd   , ""                                          )
-          , (gfMBPower8Shd , "#define MANDELBULB_SCENE\n#define POWER8\n")
-          , (gfMBGeneralShd, "#define MANDELBULB_SCENE\n"                )
+    forM_ [ (gfDECornellBoxShd   , "#define CORNELL_BOX_SCENE"                 )
+          , (gfDETestShd         , ""                                          )
+          , (gfMBPower8Shd       , "#define MANDELBULB_SCENE\n#define POWER8\n")
+          , (gfMBGeneralShd      , "#define MANDELBULB_SCENE\n"                )
           ]
           $ \(shd, defines) ->
                 let src = "#version 330 core\n" <> defines <> fsSrc
@@ -137,9 +139,10 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
     GL.bindVertexArrayObject GL.$= Just gfVAO
     -- Bind shader
     let shd = case shdEnum of
-                  FSDETestShader    -> gfDETestShd
-                  FSMBPower8Shader  -> gfMBPower8Shd
-                  FSMBGeneralShader -> gfMBGeneralShd
+                  FSDECornellBoxShader -> gfDECornellBoxShd
+                  FSDETestShader       -> gfDETestShd
+                  FSMBPower8Shader     -> gfMBPower8Shd
+                  FSMBGeneralShader    -> gfMBGeneralShd
     GL.currentProgram GL.$= Just shd
     -- Setup uniforms
     let uniformFloat nm val =
