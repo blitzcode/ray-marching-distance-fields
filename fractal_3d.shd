@@ -63,7 +63,6 @@
 // TODO: Add some form of tone mapping to the output, exposure controls
 // TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
 //       directional visibility information
-// TODO: Cornell box scene
 // TODO: distance_ao() still needs work, contribution of first sphere is just error
 
 // '#version 330 core' defined externally when we generate variations of this shader
@@ -509,6 +508,30 @@ float de_triangle(vec3 point, vec3 v0, vec3 v1, vec3 v2)
     return sqrt(sqrDistance);
 }
 
+float de_cornell_box(vec3 pos)
+{
+    // Trying to store the array with the Cornell Box geometry as literal data caused
+    // issues. The compiler tries to unroll the entire loop, inlining the fairly
+    // complicated de_triangle() function 32 times. This will stall glUseProgram(),
+    // where the actual code generation / optimization happens, for a very long time
+    // (see http://lists.apple.com/archives/mac-opengl/2008/Nov/msg00003.html).
+    // So here we store the vertices in a floating-point texture instead
+    //
+    // TODO: For some reason, the FD normal computation doesn't work at all with this DE
+    //       unless we're using a giant epsilon. The DE seems to work in general, and it
+    //       isn't immediately clear why the axis-aligned DE computations would be
+    //       extremely noisy for an axis-aligned triangle with plenty of ray back stepping
+    //
+    float dist = 10000;
+    for (int i=0; i<32; i++)
+    {
+        dist = min(dist, de_triangle(pos, texelFetch(cornell_geom, i * 3 + 0, 0).xyz,
+                                          texelFetch(cornell_geom, i * 3 + 1, 0).xyz,
+                                          texelFetch(cornell_geom, i * 3 + 2, 0).xyz));
+    }
+    return dist;
+}
+
 float smin(float a, float b, float k)
 {
     // http://iquilezles.org/www/articles/smin/smin.htm
@@ -519,33 +542,38 @@ float smin(float a, float b, float k)
 float distance_estimator(vec3 pos)
 {
 #ifdef MANDELBULB_SCENE
-    // Mandelbulb scene
-    return de_mandelbulb(pos);
+    #define DE_SCENE 0
 #else
-    // Simple DE test scene
-    //#define DE_SCENE_A
-    #ifdef DE_SCENE_A
-        // float offset =
-        //  0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
-        return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
-                 smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
-                   smin(de_sphere(pos, 0.3),
-                     de_torus(pos, 0.8, 0.2),
-                       32), 32), 64);
-        // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
-    #else
-        float d_sphere = de_sphere(pos, 0.4);
-        float d_torus = smin(smin(
-                          de_torus(pos, 0.85, 0.1),
-                            de_torus(pos.zxy, 0.85, 0.1), 64),
-                              de_torus(pos.yzx, 0.85, 0.1), 64);
-        float d_box = smin(smin(
-                        de_rounded_box(pos, vec3(0.8, 0.06, 0.06), 0.03),
-                          de_rounded_box(pos, vec3(0.06, 0.8, 0.06), 0.03), 64),
-                            de_rounded_box(pos, vec3(0.06, 0.06, 0.8), 0.03), 64);
-        return smin(d_box, min(d_sphere, d_torus), 64);
-        // return de_triangle(pos, vec3(-0.25, -0.25, 0), vec3(0.25, -0.25, 0), vec3(0, 0.25, 0));
-    #endif
+    #define DE_SCENE 2
+#endif
+
+#if DE_SCENE == 0
+    return de_mandelbulb(pos);
+#elif DE_SCENE == 1
+    // float offset =
+    //  0.03*sin(20.0*pos.x+in_time)*sin(20.0*pos.y+in_time)*sin(20.0*pos.z+in_time);
+    return smin(de_rounded_box(pos, vec3(0.05, 0.85, 0.05), 0.05),
+             smin(de_rounded_box(pos, vec3(0.1, 0.1, 0.85), 0.05),
+               smin(de_sphere(pos, 0.3),
+                 de_torus(pos, 0.8, 0.2),
+                   32), 32), 64);
+    // return de_cone(pos + vec3(0, -1, 0), normalize(vec2(0.2, 0.1)));
+#elif DE_SCENE == 2
+    float d_sphere = de_sphere(pos, 0.4);
+    float d_torus = smin(smin(
+                      de_torus(pos, 0.85, 0.1),
+                        de_torus(pos.zxy, 0.85, 0.1), 64),
+                          de_torus(pos.yzx, 0.85, 0.1), 64);
+    float d_box = smin(smin(
+                    de_rounded_box(pos, vec3(0.8, 0.06, 0.06), 0.03),
+                      de_rounded_box(pos, vec3(0.06, 0.8, 0.06), 0.03), 64),
+                        de_rounded_box(pos, vec3(0.06, 0.06, 0.8), 0.03), 64);
+    return smin(d_box, min(d_sphere, d_torus), 64);
+    //return de_triangle(pos, vec3(-0.25, -0.25, 0), vec3(0.25, -0.25, 0), vec3(0, 0.25, 0));
+#elif DE_SCENE == 3
+    return de_cornell_box(pos);
+#else
+    return 0;
 #endif
 }
 
