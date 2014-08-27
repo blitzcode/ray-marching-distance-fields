@@ -64,6 +64,10 @@
 // TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
 //       directional visibility information
 // TODO: distance_ao() still needs work, contribution of first sphere is just error
+// TODO: Stop / slow down rendering if window loses focus
+// TODO: Automatically detect changed shader file and reload
+// TODO: Speed up load time by loading and converting environment map texture in a
+//       background thread, display white or a cached scale version in the meantime
 
 // '#version 330 core' defined externally when we generate variations of this shader
 
