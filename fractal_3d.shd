@@ -31,7 +31,6 @@
 //       http://en.wikipedia.org/wiki/Mandelbulb
 // TODO: Move transformations into vertex shader, like here:
 //       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
-// TODO: Add support for tiled rendering, preventing long stalls and shader timeouts
 // TODO: Have an on-screen display of tweakable variables, allow run-time modification of
 //       all those little shader settings we tweak manually from the file for now. It
 //       would be OK to use a #define and recompile the shader if uniforms cause a slowdown
@@ -66,6 +65,7 @@
 // TODO: Stop / slow down rendering if window loses focus
 // TODO: Speed up load time by loading and converting environment map texture in a
 //       background thread, display white or a cached scale version in the meantime
+// TODO: Fix artifacts in the Cornell Box scene
 
 // '#version 330 core' defined externally when we generate variations of this shader
 

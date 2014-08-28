@@ -6,6 +6,8 @@ module GPUFractal3D ( withGPUFractal3D
                     , GPUFractal3D
                     , drawGPUFractal3D
                     , FractalShader(..)
+                    , isTileIdxFirstTile
+                    , isTileIdxLastTile
                     ) where
 
 import Control.Applicative
@@ -44,6 +46,17 @@ data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
 
 data FractalShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
                      deriving (Show, Eq, Enum)
+
+tilesX, tilesY, nTiles :: Int
+tilesX = 8
+tilesY = 8
+nTiles = tilesX * tilesY
+
+isTileIdxLastTile :: Int -> Bool
+isTileIdxLastTile idx = idx `mod` nTiles == nTiles - 1
+
+isTileIdxFirstTile :: Int -> Bool
+isTileIdxFirstTile idx = idx `mod` nTiles == 0
 
 withGPUFractal3D :: FilePath -> FilePath -> (GPUFractal3D -> IO a) -> IO a
 withGPUFractal3D gfShdFn reflMapFn f = do
@@ -133,8 +146,8 @@ buildPreConvolvedHDREnvMapCache reflMap powfn = do
                 (removeFile fn) -- Delete cache image file on error / cancellation
             traceS TLInfo $ printf "Written '%s' in %.2fs" (takeFileName fn) timeWritten
 
-drawGPUFractal3D :: GPUFractal3D -> FractalShader -> Int -> Int -> Double -> IO ()
-drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
+drawGPUFractal3D :: GPUFractal3D -> FractalShader -> Maybe Int -> Int -> Int -> Double -> IO ()
+drawGPUFractal3D GPUFractal3D { .. } shdEnum tileIdx w h time = do
     -- We need a dummy VAO active with all vertex attributes disabled
     GL.bindVertexArrayObject GL.$= Just gfVAO
     -- Bind shader
@@ -144,32 +157,39 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
                   FSMBPower8Shader     -> gfMBPower8Shd
                   FSMBGeneralShader    -> gfMBGeneralShd
     GL.currentProgram GL.$= Just shd
-    -- Setup uniforms
-    let uniformFloat nm val =
-            GL.get (GL.uniformLocation shd nm) >>= \(GL.UniformLocation loc) ->
-                GLR.glUniform1f loc val
-     in do uniformFloat "in_screen_wdh" $ fromIntegral w
-           uniformFloat "in_screen_hgt" $ fromIntegral h
-           uniformFloat "in_time"       $ realToFrac time
-    -- Setup environment cube maps
-    forM_ (zip gfEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
-        setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
-    -- Cornell box geometry texture
-    setTextureShader gfCornellBoxGeomTex GL.Texture1D (length gfEnvCubeMaps) shd "cornell_geom"
+    -- Only set shader parameters on the first tile, don't want them to change
+    -- over the course of a single frame
+    when (case tileIdx of Nothing -> True; Just idx -> isTileIdxFirstTile idx) $ do
+        -- Setup uniforms
+        let uniformFloat nm val =
+                GL.get (GL.uniformLocation shd nm) >>= \(GL.UniformLocation loc) ->
+                    GLR.glUniform1f loc val
+         in do uniformFloat "in_screen_wdh" $ fromIntegral w
+               uniformFloat "in_screen_hgt" $ fromIntegral h
+               uniformFloat "in_time"       $ realToFrac time
+        -- Setup environment cube maps
+        forM_ (zip gfEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
+            setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
+        -- Cornell box geometry texture
+        setTextureShader gfCornellBoxGeomTex GL.Texture1D (length gfEnvCubeMaps) shd "cornell_geom"
     -- Don't need any VBO etc, the vertex shader will make this a proper quad.
     -- Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)
     GLR.glVertexAttrib1f 0 0
-    -- Draw the full screen quad in tiles to prevent shader timeouts when we're rendering
-    -- very complex images or very high resolution
-    let tilesx = 8 :: Int
-        tilesy = 8 :: Int
-    forM_ [0..tilesy - 1] $ \y -> forM_ [0..tilesx - 1] $ \x -> do
-        GL.get (GL.uniformLocation shd "quad") >>= \(GL.UniformLocation loc) ->
-            GLR.glUniform4f loc
-                (-1 + fromIntegral  x      / fromIntegral tilesx * 2)
-                (-1 + fromIntegral  y      / fromIntegral tilesy * 2)
-                (-1 + fromIntegral (x + 1) / fromIntegral tilesx * 2)
-                (-1 + fromIntegral (y + 1) / fromIntegral tilesy * 2)
-        GL.drawArrays GL.TriangleStrip 0 4
+    -- Optionally draw the full screen quad in tiles to prevent shader timeouts and when
+    -- increase UI responsibility we're rendering very complex images or at very high resolution
+    let (x0, y0, x1, y1) =
+            case tileIdx of
+                Nothing   -> (-1, -1, 1, 1)
+                Just idx  -> let midx = idx  `mod` nTiles
+                                 tx   = midx `mod` tilesX
+                                 ty   = midx `div` tilesX
+                              in ( (-1 + fromIntegral  tx      / fromIntegral tilesX * 2)
+                                 , (-1 + fromIntegral  ty      / fromIntegral tilesY * 2)
+                                 , (-1 + fromIntegral (tx + 1) / fromIntegral tilesX * 2)
+                                 , (-1 + fromIntegral (ty + 1) / fromIntegral tilesY * 2)
+                                 )
+     in GL.get (GL.uniformLocation shd "quad") >>= \(GL.UniformLocation loc) ->
+            GLR.glUniform4f loc x0 y0 x1 y1
+    GL.drawArrays GL.TriangleStrip 0 4
 

@@ -52,6 +52,9 @@ data AppState = AppState { _asCurTick          :: !Double
                          , _asMode             :: !Mode
                          , _asFBScale          :: !Float
                          , _asLastShdErr       :: !String
+                         , _asTiling           :: !Bool
+                         , _asFrameIdx         :: !Int
+                         , _asTakeScreenShot   :: !Bool
                          }
 
 data AppEnv = AppEnv { _aeWindow           :: GLFW.Window
@@ -97,15 +100,14 @@ processGLFWEvent ev =
                     when (tick - lastPress < 0.5) .
                         liftIO $ GLFW.setWindowShouldClose win True
                     asLastEscPress .= tick
-                -- Also clear frame time history on mode / scaling switch
-                GLFW.Key'Minus -> asMode %= wrapPred >> asFrameTimes %= BS.clear
-                GLFW.Key'Equal -> asMode %= wrapSucc >> asFrameTimes %= BS.clear
+                -- Mode / scaling switch is a render settings change
+                GLFW.Key'Minus -> asMode %= wrapPred >> onRenderSettingsChage
+                GLFW.Key'Equal -> asMode %= wrapSucc >> onRenderSettingsChage
                 GLFW.Key'L
                     | GLFW.modifierKeysShift mk -> asFBScale %= min 16    . (* 2) >> resize
                     | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
-                GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
-                                    map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
-                                      . printf "Screenshot-%s.png" =<< show <$> getZonedTime
+                GLFW.Key'S     -> asTakeScreenShot .= True
+                GLFW.Key'T     -> asTiling %= not >> onRenderSettingsChage
                 _              -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
@@ -130,7 +132,7 @@ resize = do
                 resizeFrameBuffer fb
                                   (round $ fromIntegral w * scale)
                                   (round $ fromIntegral h * scale)
-    asFrameTimes %= BS.clear
+    onRenderSettingsChage
 
 -- Move through an enumeration, but wrap around when hitting the end
 wrapSucc, wrapPred :: (Enum a, Bounded a, Eq a) => a -> a
@@ -149,9 +151,11 @@ draw = do
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
     -- Draw fractal into our frame buffer texture
-    let fillFB             = void . fillFrameBuffer _aeFB
-        drawFB             = void . drawIntoFrameBuffer _aeFB
-        drawGPUFractal shd w h = drawGPUFractal3D _aeGPUFrac3D shd w h _asCurTick
+    let fillFB              = void . fillFrameBuffer _aeFB
+        drawFB              = void . drawIntoFrameBuffer _aeFB
+        tileIdx | _asTiling = Just _asFrameIdx
+                | otherwise = Nothing
+        drawGPUFractal shd w h = drawGPUFractal3D _aeGPUFrac3D shd tileIdx w h _asCurTick
      in liftIO $ case _asMode of
         ModeJuliaAnim          -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
         ModeJuliaAnimSmooth    -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
@@ -178,12 +182,13 @@ draw = do
             ftStr <- updateAndReturnFrameTimes
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
-                printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n" ++
-                         "FB Sca[l]e: %fx, Dim %ix%i | %s"
+                printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit | " ++
+                         "[T]iles: %s\nFB Sca[l]e: %fx, Dim %ix%i | %s"
                        )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
                        (show _asMode)
+                       (if _asTiling then "On" else "Off")
                        _asFBScale
                        fbWdh
                        fbHgt
@@ -246,7 +251,29 @@ checkShaderModified = do
                                  asLastShdErr .= err
                   Right s  -> do liftIO . traceS TLInfo $ printf "Reloaded shaders in %.2fs" s
                                  asLastShdErr .= ""
-                                 asFrameTimes %= BS.clear
+                                 onRenderSettingsChage
+
+checkTakeScreenShot :: AppIO ()
+checkTakeScreenShot = do
+    takeSS <- use asTakeScreenShot
+    tiling <- use asTiling
+    idx    <- use asFrameIdx
+    -- Are we asked to take a screen shot?
+    when takeSS $
+        -- Are we drawing full frames or have we just finished the last tile?
+        when (not tiling || isTileIdxLastTile idx) $ do
+            view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
+                map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
+                    . printf "Screenshot-%s.png" =<< show <$> getZonedTime
+            asTakeScreenShot .= False
+
+onRenderSettingsChage :: AppIO ()
+onRenderSettingsChage = do
+    -- Reset frame time measurements and frame index when the rendering
+    -- settings have changed
+    asFrameTimes     %= BS.clear
+    asFrameIdx       .= 0
+    asTakeScreenShot .= False
 
 run :: AppIO ()
 run = do
@@ -255,7 +282,7 @@ run = do
     resize
     liftIO $ GLFW.swapInterval 0
     -- Main loop
-    let loop frameIdx = do
+    let loop = do
           asCurTick <~ liftIO getTick
           tqGLFW <- view aeGLFWEventsQueue
           processAllEvents tqGLFW processGLFWEvent
@@ -268,9 +295,12 @@ run = do
               GLFW.swapBuffers window
               GLFW.pollEvents
               traceOnGLError $ Just "main loop"
+          -- Can take a screen shot after the last tile has been rendered
+          checkTakeScreenShot
           -- Drop the first three frame deltas, they are often outliers
-          when (frameIdx < 3) $ asFrameTimes %= BS.clear
+          use asFrameIdx >>= \idx -> when (idx < 3) (asFrameTimes %= BS.clear)
+          asFrameIdx += 1
           -- Done?
-          flip unless (loop $ frameIdx + 1) =<< liftIO (GLFW.windowShouldClose window)
-     in loop (0 :: Int)
+          flip unless loop =<< liftIO (GLFW.windowShouldClose window)
+     in loop
 

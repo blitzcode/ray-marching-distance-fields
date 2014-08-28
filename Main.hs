@@ -60,11 +60,14 @@ main = do
             traceSystemInfo
             _asCurTick          <- getTick
             _aeShaderModChecker <- checkModifedAsync fractalShdFn 0.5
-            let as = AppState { _asLastEscPress = -1
-                              , _asFrameTimes   = BS.empty 60 -- Average over last N FPS
-                              , _asMode         = ModeDETestShader
-                              , _asFBScale      = 1
-                              , _asLastShdErr   = ""
+            let as = AppState { _asLastEscPress   = -1
+                              , _asFrameTimes     = BS.empty 60 -- Average over last N FPS
+                              , _asMode           = ModeDETestShader
+                              , _asFBScale        = 1
+                              , _asLastShdErr     = ""
+                              , _asTiling         = False
+                              , _asFrameIdx       = 0
+                              , _asTakeScreenShot = False
                               , ..
                               }
                 ae = AppEnv { .. }

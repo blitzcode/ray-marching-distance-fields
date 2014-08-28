@@ -73,7 +73,12 @@ withFrameBuffer w h fbDownscaling f = do
     return r
 
 resizeFrameBuffer :: FrameBuffer -> Int -> Int -> IO ()
-resizeFrameBuffer fb w h = writeIORef (fbDim fb) (w, h)
+resizeFrameBuffer fb w h = do
+    writeIORef (fbDim fb) (w, h)
+    -- Clear contents to black
+    void . drawIntoFrameBuffer fb $ \_ _ -> do
+        GL.clearColor GL.$= (GL.Color4 0 0 0 1 :: GL.Color4 GL.GLclampf)
+        GL.clear [GL.ColorBuffer]
 
 getFrameBufferDim :: FrameBuffer -> IO (Int, Int)
 getFrameBufferDim fb = readIORef $ fbDim fb
@@ -82,7 +87,7 @@ getFrameBufferDim fb = readIORef $ fbDim fb
 fillFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
                 => FrameBuffer
                 -> (Int -> Int -> VSM.MVector s Word32 -> m a) -- Run inner inside the base monad
-                -> m (Maybe a)                                 -- We return Nothing if mapping fails
+                -> m (Maybe a)                                 -- Return Nothing if mapping fails
 fillFrameBuffer fb@(FrameBuffer { .. }) f = do
     -- Map. If this function is nested inside another fillFrameBuffer with the same FrameBuffer,
     -- the mapping operation will fail as OpenGL does not allow two concurrent mappings. Hence,
