@@ -39,19 +39,19 @@ data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
                                  , gfMBGeneralShd      :: !GL.Program
                                  , gfEnvCubeMaps       :: [(String, GL.TextureObject)]
                                  , gfCornellBoxGeomTex :: !GL.TextureObject
+                                 , gfShdFn             :: !FilePath
                                  }
 
 data FractalShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
                      deriving (Show, Eq, Enum)
 
-withGPUFractal3D :: (GPUFractal3D -> IO a) -> IO a
-withGPUFractal3D f = do
+withGPUFractal3D :: FilePath -> FilePath -> (GPUFractal3D -> IO a) -> IO a
+withGPUFractal3D gfShdFn reflMapFn f = do
     -- Create, compile and link shaders, load resources
     r <- runExceptT . runResourceT $ do
              gfVAO <- genObjectNameResource
              -- Load reflection environment map
              envStart <- liftIO getTick
-             let reflMapFn = "./latlong_envmaps/uffizi-large.hdr"
              reflMap <- either throwError return =<< liftIO (loadHDRImage reflMapFn)
                         -- Build debug environment map
                         -- return buildTestLatLongEnvMap
@@ -99,7 +99,7 @@ loadAndCompileShaders GPUFractal3D { .. } = runExceptT $ do
     -- Fragment shader is loaded from a file
     shaderStart <- liftIO getTick
     fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
-                 =<< (liftIO . try . B.readFile $ "./fractal_3d.shd")
+                 =<< (liftIO . try . B.readFile $ gfShdFn)
     -- Generate several shader variations through GLSL's pre-processor
     forM_ [ (gfDECornellBoxShd, "#define CORNELL_BOX_SCENE"                 )
           , (gfDETestShd      , ""                                          )
@@ -162,8 +162,8 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum w h time = do
     GLR.glVertexAttrib1f 0 0
     -- Draw the full screen quad in tiles to prevent shader timeouts when we're rendering
     -- very complex images or very high resolution
-    let tilesx = 1 :: Int
-        tilesy = 1 :: Int
+    let tilesx = 8 :: Int
+        tilesy = 8 :: Int
     forM_ [0..tilesy - 1] $ \y -> forM_ [0..tilesx - 1] $ \x -> do
         GL.get (GL.uniformLocation shd "quad") >>= \(GL.UniformLocation loc) ->
             GLR.glUniform4f loc

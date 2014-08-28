@@ -65,7 +65,6 @@
 //       directional visibility information
 // TODO: distance_ao() still needs work, contribution of first sphere is just error
 // TODO: Stop / slow down rendering if window loses focus
-// TODO: Automatically detect changed shader file and reload
 // TODO: Speed up load time by loading and converting environment map texture in a
 //       background thread, display white or a cached scale version in the meantime
 

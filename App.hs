@@ -34,6 +34,7 @@ import FrameBuffer
 import Fractal2D
 import GPUFractal3D
 import QuadRendering
+import FileModChecker
 import qualified BoundedSequence as BS
 
 data Mode = ModeMandelBrot
@@ -46,12 +47,13 @@ data Mode = ModeMandelBrot
           | ModeMBGeneralShader
             deriving (Enum, Eq, Bounded, Show)
 
-data AppState = AppState { _asCurTick      :: !Double
-                         , _asLastEscPress :: !Double
-                         , _asFrameTimes   :: BS.BoundedSequence Double
-                         , _asMode         :: !Mode
-                         , _asFBScale      :: !Float
-                         , _asLastShdErr   :: !String
+data AppState = AppState { _asCurTick          :: !Double
+                         , _asLastEscPress     :: !Double
+                         , _asFrameTimes       :: BS.BoundedSequence Double
+                         , _asMode             :: !Mode
+                         , _asFBScale          :: !Float
+                         , _asLastShdErr       :: !String
+                         , _asShaderModChecker :: !FileMod
                          }
 
 data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
@@ -105,13 +107,6 @@ processGLFWEvent ev =
                 GLFW.Key'S     -> view aeFB >>= \fb -> liftIO $ saveFrameBufferToPNG fb .
                                     map (\c -> if c `elem` ['/', '\\', ':', ' '] then '-' else c)
                                       . printf "Screenshot-%s.png" =<< show <$> getZonedTime
-                GLFW.Key'R     -> do view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
-                                       \case Left err -> do liftIO . traceS TLError $
-                                                              "Failed to reload shaders:\n" ++ err
-                                                            asLastShdErr .= err
-                                             Right s  -> do liftIO . traceS TLInfo $
-                                                              printf "Reloaded shaders in %.2fs" s
-                                                            asLastShdErr .= ""
                 _              -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
@@ -184,8 +179,8 @@ draw = do
             ftStr <- updateAndReturnFrameTimes
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
-                printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit | " ++
-                         "[R]eload Shd.\nFB Sca[l]e: %fx, Dim %ix%i | %s"
+                printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit\n" ++
+                         "FB Sca[l]e: %fx, Dim %ix%i | %s"
                        )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
@@ -241,6 +236,19 @@ drawTextWithShadow tex qb x y str = do
     drawText tex qb (x + 1) (y - 1) 0x00000000 str
     drawText tex qb  x       y      0x0000FF00 str
 
+checkShaderModified :: AppIO ()
+checkShaderModified = do
+    -- Check if our shader file has been modified on disk
+    checker       <- use asShaderModChecker
+    (checker', r) <- liftIO $ isModified checker
+    asShaderModChecker .= checker'
+    when r $ do
+        view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
+            \case Left err -> do liftIO . traceS TLError $ "Failed to reload shaders:\n" ++ err
+                                 asLastShdErr .= err
+                  Right s  -> do liftIO . traceS TLInfo $ printf "Reloaded shaders in %.2fs" s
+                                 asLastShdErr .= ""
+
 run :: AppIO ()
 run = do
     -- Setup OpenGL / GLFW
@@ -252,6 +260,7 @@ run = do
           asCurTick <~ liftIO getTick
           tqGLFW <- view aeGLFWEventsQueue
           processAllEvents tqGLFW processGLFWEvent
+          checkShaderModified
           -- GLFW / OpenGL
           draw
           liftIO $ {-# SCC swapAndPoll #-} do
