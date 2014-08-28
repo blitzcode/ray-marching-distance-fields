@@ -59,7 +59,7 @@ main = do
           withGPUFractal3D fractalShdFn reflMapFn $ \_aeGPUFrac3D -> do
             traceSystemInfo
             _asCurTick          <- getTick
-            _asShaderModChecker <- mkFileModChecker fractalShdFn 0.5
+            _aeShaderModChecker <- checkModifedAsync fractalShdFn 0.5
             let as = AppState { _asLastEscPress = -1
                               , _asFrameTimes   = BS.empty 60 -- Average over last N FPS
                               , _asMode         = ModeDETestShader

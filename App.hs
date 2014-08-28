@@ -34,7 +34,6 @@ import FrameBuffer
 import Fractal2D
 import GPUFractal3D
 import QuadRendering
-import FileModChecker
 import qualified BoundedSequence as BS
 
 data Mode = ModeMandelBrot
@@ -53,15 +52,15 @@ data AppState = AppState { _asCurTick          :: !Double
                          , _asMode             :: !Mode
                          , _asFBScale          :: !Float
                          , _asLastShdErr       :: !String
-                         , _asShaderModChecker :: !FileMod
                          }
 
-data AppEnv = AppEnv { _aeWindow          :: GLFW.Window
-                     , _aeGLFWEventsQueue :: TQueue GLFWEvent
-                     , _aeFontTexture     :: GL.TextureObject
-                     , _aeFB              :: FrameBuffer
-                     , _aeQR              :: QuadRenderer
-                     , _aeGPUFrac3D       :: GPUFractal3D
+data AppEnv = AppEnv { _aeWindow           :: GLFW.Window
+                     , _aeGLFWEventsQueue  :: TQueue GLFWEvent
+                     , _aeFontTexture      :: GL.TextureObject
+                     , _aeFB               :: FrameBuffer
+                     , _aeQR               :: QuadRenderer
+                     , _aeGPUFrac3D        :: GPUFractal3D
+                     , _aeShaderModChecker :: IO Bool
                      }
 
 makeLenses ''AppState
@@ -236,13 +235,12 @@ drawTextWithShadow tex qb x y str = do
     drawText tex qb (x + 1) (y - 1) 0x00000000 str
     drawText tex qb  x       y      0x0000FF00 str
 
+-- Check if our shader file has been modified on disk and reload shaders if it has been
 checkShaderModified :: AppIO ()
 checkShaderModified = do
-    -- Check if our shader file has been modified on disk
-    checker       <- use asShaderModChecker
-    (checker', r) <- liftIO $ isModified checker
-    asShaderModChecker .= checker'
-    when r $ do
+    checker  <- view aeShaderModChecker
+    modified <- liftIO checker
+    when modified $
         view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
             \case Left err -> do liftIO . traceS TLError $ "Failed to reload shaders:\n" ++ err
                                  asLastShdErr .= err
