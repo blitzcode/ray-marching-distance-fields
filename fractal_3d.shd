@@ -63,7 +63,6 @@
 // TODO: Add some form of tone mapping to the output, exposure controls
 // TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
 //       directional visibility information
-// TODO: distance_ao() still needs work, contribution of first sphere is just error
 // TODO: Stop / slow down rendering if window loses focus
 // TODO: Speed up load time by loading and converting environment map texture in a
 //       background thread, display white or a cached scale version in the meantime
@@ -630,12 +629,14 @@ vec3 normal_screen_space_isec(vec3 p)
 // Then, there are still errors due to the distance at p not being zero, which makes
 // sense as the ray marcher will stop at a min. distance. A cheap fix is to simply clamp
 // the term. There's also some kind of surface acne problem that can be mitigated by back
-// stepping on the ray like for the normal computation.
+// stepping on the ray like for the normal computation. The deltas are also poorly setup,
+// with some spheres contributing little more than artifacts or a constant occlusion
 //
-float distance_ao(vec3 p, vec3 n)
+float distance_ao_old(vec3 p, vec3 n)
 {
     float weight = 0.5;
     float occl_sum = 0.0;
+
     for (int i=0; i<5; i++)
     {
         // Test progressively larger spheres further away along the surface normal
@@ -656,6 +657,26 @@ float distance_ao(vec3 p, vec3 n)
     // Magic fudge factor to make dark parts darker and bright parts brighter
     occl_sum = (clamp((occl_sum * 2 - 1) * 1.65, -1, 1) + 1) * 0.5;
     return pow(1.0 - occl_sum, 8.0);
+}
+
+// Faster, simpler, more stable, less artifacts version of distance_ao_old()
+float distance_ao(vec3 p, vec3 n)
+{
+    float occl_sum = 0.0;
+    float weight, delta;
+
+    weight = 0.5;
+    delta = 0.016;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.25;
+    delta = 0.081;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    // Magic fudge factor to make dark parts darker and bright parts brighter
+    occl_sum = (clamp((occl_sum * 2 - 1) * 2.0, -1, 1) + 1) * 0.5;
+    occl_sum = 1 - occl_sum;
+    return occl_sum * occl_sum;
 }
 
 bool ray_sphere( vec3 origin
