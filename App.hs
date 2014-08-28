@@ -246,6 +246,7 @@ checkShaderModified = do
                                  asLastShdErr .= err
                   Right s  -> do liftIO . traceS TLInfo $ printf "Reloaded shaders in %.2fs" s
                                  asLastShdErr .= ""
+                                 asFrameTimes %= BS.clear
 
 run :: AppIO ()
 run = do
