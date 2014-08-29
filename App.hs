@@ -223,6 +223,7 @@ updateAndReturnFrameTimes :: MonadState AppState m => m String
 updateAndReturnFrameTimes = do
     frameTimes <- use $ asFrameTimes.to BS.toList
     curTick    <- use asCurTick
+    tiling     <- use asTiling
     asFrameTimes %= BS.push_ curTick
     let frameDeltas      = case frameTimes of (x:xs) -> goFD x xs; _ -> []
         goFD prev (x:xs) = (prev - x) : goFD x xs
@@ -230,10 +231,12 @@ updateAndReturnFrameTimes = do
         fdMean           = sum frameDeltas / (fromIntegral $ length frameDeltas)
         fdWorst          = case frameDeltas of [] -> 0; xs -> maximum xs
         fdBest           = case frameDeltas of [] -> 0; xs -> minimum xs
-     in return $ printf "%.2fFPS/%.1fms (Worst: %.2f, Best: %.2f)"
-                        (1.0 / fdMean ) (fdMean  * 1000)
+     in return $ printf "%.2f%s/%.1fms (Worst: %.2f, Best: %.2f)"
+                        (1.0 / fdMean)
+                        (if tiling then "TPS" else "FPS")
+                        (fdMean  * 1000)
                         (1.0 / fdWorst)
-                        (1.0 / fdBest )
+                        (1.0 / fdBest)
 
 drawTextWithShadow :: GL.TextureObject -> QuadRenderBuffer -> Int -> Int -> String -> IO ()
 drawTextWithShadow tex qb x y str = do
@@ -267,10 +270,10 @@ checkTakeScreenShot = do
                     . printf "Screenshot-%s.png" =<< show <$> getZonedTime
             asTakeScreenShot .= False
 
-onRenderSettingsChage :: AppIO ()
+onRenderSettingsChage :: MonadState AppState m => m ()
 onRenderSettingsChage = do
-    -- Reset frame time measurements and frame index when the rendering
-    -- settings have changed
+    -- Reset frame time measurements and frame index when the rendering settings have
+    -- changed. Also cancel any outstanding screen shot requests
     asFrameTimes     %= BS.clear
     asFrameIdx       .= 0
     asTakeScreenShot .= False
