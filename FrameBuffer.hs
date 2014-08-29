@@ -74,8 +74,25 @@ withFrameBuffer w h fbDownscaling f = do
 
 resizeFrameBuffer :: FrameBuffer -> Int -> Int -> IO ()
 resizeFrameBuffer fb w h = do
-    writeIORef (fbDim fb) (w, h)
-    -- Clear contents to black
+    -- Limit requested size by maximum available and store. This can lead to some
+    -- blurriness when drawing with high quality downscaling. For instance, a 640^2
+    -- window size with a maximum render size of 1024^2 and 2x super sampling will
+    -- not get the requested 1280^2, and there won't be a clean 1:4 pixel ratio,
+    -- leading to some blurriness from the MIP-mapping filter. This is of course
+    -- preferable to failing to allocate the FB altogether, but is the reason why
+    -- sometimes higher levels of super sampling will reduce sharpness in the preview
+    (maxWdh, maxHgt) <- maxRenderSize
+    let aspect             = fromIntegral w / fromIntegral h :: Double
+        wdiff              = max 0 $ w - maxWdh
+        (clampWW, clampWH) = ( w - wdiff
+                             , truncate $ fromIntegral h - fromIntegral wdiff / aspect
+                             )
+        hdiff              = max 0 $ clampWH - maxHgt
+        (clampHW, clampHH) = ( truncate $ fromIntegral clampWW - fromIntegral hdiff * aspect
+                             , clampWH - hdiff
+                             )
+     in writeIORef (fbDim fb) (clampHW, clampHH)
+    -- Clear contents to black (drawing allocates resources as well)
     void . drawIntoFrameBuffer fb $ \_ _ -> do
         GL.clearColor GL.$= (GL.Color4 0 0 0 1 :: GL.Color4 GL.GLclampf)
         GL.clear [GL.ColorBuffer]

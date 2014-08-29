@@ -13,6 +13,7 @@ module GLHelpers ( getGLStrings
                  , setTextureClampST
                  , TextureFiltering(..)
                  , setupViewport
+                 , maxRenderSize
                  , genObjectNameResource
                  ) where
 
@@ -26,6 +27,7 @@ import Control.Monad.Trans.Resource
 import Text.Printf
 import Data.Maybe
 import Foreign.Marshal.Alloc
+import Foreign.Marshal.Array
 import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.String
@@ -60,16 +62,32 @@ getGLExtensionList :: IO [String]
 getGLExtensionList =
   getNumExtensions >>= \numExt -> forM [0..numExt - 1] $ \i -> getExtensionStr i
 
+-- Take the minimum of the maximum viewport and texture size to figure out
+-- how large of a frame buffer we can allocate and render into
+maxRenderSize :: IO (Int, Int)
+maxRenderSize =
+    withArray [0, 0] $ \ptr -> do
+        GLR.glGetIntegerv GLR.gl_MAX_VIEWPORT_DIMS ptr
+        [vpWdh, vpHgt] <- peekArray 2 ptr
+        GLR.glGetIntegerv GLR.gl_MAX_TEXTURE_SIZE ptr
+        texDim <- peek ptr
+        return (fromIntegral $ min vpWdh texDim, fromIntegral $ max vpHgt texDim)
+
 getGLStrings :: IO String
 getGLStrings = do
   numExt <- getNumExtensions
+  (w, h) <- maxRenderSize
   printf
-      "OpenGL - Vendor: %s · Renderer: %s · Version: %s · GLSL: %s · Num Extensions: %i · GLFW: %s"
+      ( "OpenGL - Vendor: %s · Renderer: %s · Version: %s · GLSL: %s · Num Extensions: %i" ++
+        " · Max FB Res: %ix%i\nGLFW   - Version: %s"
+      )
       <$> GL.get GL.vendor
       <*> GL.get GL.renderer
       <*> GL.get GL.glVersion
       <*> GL.get GL.shadingLanguageVersion
-      <*> (pure $ numExt)
+      <*> pure numExt
+      <*> pure w
+      <*> pure h
       <*> (fromJust <$> GLFW.getVersionString)
 
 getCurTex2DSize :: IO (Int, Int)
