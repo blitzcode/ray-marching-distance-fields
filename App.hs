@@ -91,7 +91,7 @@ processGLFWEvent ev =
            liftIO $ do
                traceS TLError $ "GLFW Error " ++ show e ++ " " ++ show s
                GLFW.setWindowShouldClose window True
-        GLFWEventKey win k {- sc -} _ ks mk | ks == GLFW.KeyState'Pressed ->
+        GLFWEventKey win k {- sc -} _ ks {- mk -} _ | ks == GLFW.KeyState'Pressed ->
             case k of
                 GLFW.Key'Escape -> do
                     lastPress <- use asLastEscPress
@@ -101,14 +101,13 @@ processGLFWEvent ev =
                         liftIO $ GLFW.setWindowShouldClose win True
                     asLastEscPress .= tick
                 -- Mode / scaling switch is a render settings change
-                GLFW.Key'Minus -> asMode %= wrapPred >> onRenderSettingsChage
-                GLFW.Key'Equal -> asMode %= wrapSucc >> onRenderSettingsChage
-                GLFW.Key'L
-                    | GLFW.modifierKeysShift mk -> asFBScale %= min 16    . (* 2) >> resize
-                    | otherwise                 -> asFBScale %= max 0.125 . (/ 2) >> resize
-                GLFW.Key'S     -> asTakeScreenShot .= True
-                GLFW.Key'T     -> asTiling %= not >> onRenderSettingsChage
-                _              -> return ()
+                GLFW.Key'Minus  -> asMode %= wrapPred >> onRenderSettingsChage
+                GLFW.Key'Equal  -> asMode %= wrapSucc >> onRenderSettingsChage
+                GLFW.Key'Comma  -> asFBScale %= max 0.125 . (/ 2) >> resize
+                GLFW.Key'Period -> asFBScale %= min 16    . (* 2) >> resize
+                GLFW.Key'S      -> asTakeScreenShot .= True
+                GLFW.Key'T      -> asTiling %= not >> onRenderSettingsChage
+                _               -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
         -- GLFWEventWindowSize {- win -} _ w h -> do
         --     liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
@@ -183,7 +182,7 @@ draw = do
             (fbWdh, fbHgt) <- liftIO $ getFrameBufferDim _aeFB
             liftIO . drawTextWithShadow _aeFontTexture qb 3 (h - 12) $
                 printf ( "Mode %i/%i [-][=]: %s | [S]creenshot | 2x[ESC] Exit | " ++
-                         "[T]iles: %s\nFB Sca[l]e: %fx, Dim %ix%i | %s"
+                         "[T]iles: %s\nFB Scaling [,][.]: %fx, %ix%i | %s"
                        )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
