@@ -1,14 +1,14 @@
 
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
 
-module GPUFractal3D ( withGPUFractal3D
-                    , loadAndCompileShaders
-                    , GPUFractal3D
-                    , drawGPUFractal3D
-                    , FractalShader(..)
-                    , isTileIdxFirstTile
-                    , isTileIdxLastTile
-                    ) where
+module ShaderRendering ( withShaderRenderer
+                       , loadAndCompileShaders
+                       , ShaderRenderer
+                       , drawShaderTile
+                       , FragmentShader(..)
+                       , isTileIdxFirstTile
+                       , isTileIdxLastTile
+                       ) where
 
 import Control.Applicative
 import Control.Exception
@@ -29,23 +29,23 @@ import qualified Codec.Picture as JP
 import Trace
 import Timing
 import GLHelpers
-import Shaders
-import GPUFractal3DShaderSource
+import GLSLHelpers
+import ShaderRenderingVertexShaderSrc
 import HDREnvMap
 import CornellBox
 
-data GPUFractal3D = GPUFractal3D { gfVAO               :: !GL.VertexArrayObject
-                                 , gfDECornellBoxShd   :: !GL.Program
-                                 , gfDETestShd         :: !GL.Program
-                                 , gfMBPower8Shd       :: !GL.Program
-                                 , gfMBGeneralShd      :: !GL.Program
-                                 , gfEnvCubeMaps       :: [(String, GL.TextureObject)]
-                                 , gfCornellBoxGeomTex :: !GL.TextureObject
-                                 , gfShdFn             :: !FilePath
-                                 }
+data ShaderRenderer = ShaderRenderer { srVAO               :: !GL.VertexArrayObject
+                                     , srShdFn             :: !FilePath
+                                     , srDECornellBoxShd   :: !GL.Program
+                                     , srDETestShd         :: !GL.Program
+                                     , srMBPower8Shd       :: !GL.Program
+                                     , srMBGeneralShd      :: !GL.Program
+                                     , srEnvCubeMaps       :: [(String, GL.TextureObject)]
+                                     , srCornellBoxGeomTex :: !GL.TextureObject
+                                     }
 
-data FractalShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
-                     deriving (Show, Eq, Enum)
+data FragmentShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
+                      deriving (Show, Eq, Enum)
 
 tilesX, tilesY, nTiles :: Int
 tilesX = 8
@@ -58,11 +58,11 @@ isTileIdxLastTile idx = idx `mod` nTiles == nTiles - 1
 isTileIdxFirstTile :: Int -> Bool
 isTileIdxFirstTile idx = idx `mod` nTiles == 0
 
-withGPUFractal3D :: FilePath -> FilePath -> (GPUFractal3D -> IO a) -> IO a
-withGPUFractal3D gfShdFn reflMapFn f = do
+withShaderRenderer :: FilePath -> FilePath -> (ShaderRenderer -> IO a) -> IO a
+withShaderRenderer srShdFn reflMapFn f = do
     -- Create, compile and link shaders, load resources
     r <- runExceptT . runResourceT $ do
-             gfVAO <- genObjectNameResource
+             srVAO <- genObjectNameResource
              -- Load reflection environment map
              envStart <- liftIO getTick
              reflMap <- either throwError return =<< liftIO (loadHDRImage reflMapFn)
@@ -86,38 +86,38 @@ withGPUFractal3D gfShdFn reflMapFn f = do
                         )
              -- Add regular reflection environment map and store in record
              reflCubeMap <- convertAndAllocCM reflMap
-             let gfEnvCubeMaps = ("env_reflection", reflCubeMap) : envCubeMaps
+             let srEnvCubeMaps = ("env_reflection", reflCubeMap) : envCubeMaps
              envEnd <- liftIO getTick
              -- Create fragment shaders
-             [gfDECornellBoxShd, gfDETestShd, gfMBPower8Shd, gfMBGeneralShd] <-
+             [srDECornellBoxShd, srDETestShd, srMBPower8Shd, srMBGeneralShd] <-
                  forM ([0..3] :: [Int]) $ \_ ->
                      snd <$> allocate GL.createProgram GL.deleteObjectName
              -- Cornell box geometry texture
-             gfCornellBoxGeomTex <-
+             srCornellBoxGeomTex <-
                 snd <$> allocate mkCornellBoxVerticesTex GL.deleteObjectName
              -- Record
-             let gpuFractal3D = GPUFractal3D { .. }
+             let sr = ShaderRenderer { .. }
              -- Shaders
              shaderTime <- either throwError return
-                               =<< liftIO (loadAndCompileShaders gpuFractal3D)
+                               =<< liftIO (loadAndCompileShaders sr)
              -- Statistics
              liftIO . traceS TLInfo $ printf
-                "withGPUFractal3D - Shader time: %.2fs, EnvMap time: %.2fs"
+                "withShaderRenderer - Shader time: %.2fs, EnvMap time: %.2fs"
                 shaderTime (envEnd - envStart)
-             liftIO $ f gpuFractal3D
-    either (traceAndThrow . printf "withGPUFractal3D - Init failed:\n%s") return r
+             liftIO $ f sr
+    either (traceAndThrow . printf "withShaderRenderer - Init failed:\n%s") return r
 
-loadAndCompileShaders :: GPUFractal3D -> IO (Either String Double)
-loadAndCompileShaders GPUFractal3D { .. } = runExceptT $ do
+loadAndCompileShaders :: ShaderRenderer -> IO (Either String Double)
+loadAndCompileShaders ShaderRenderer { .. } = runExceptT $ do
     -- Fragment shader is loaded from a file
     shaderStart <- liftIO getTick
     fsSrc <- either (\(e :: IOException) -> throwError $ show e) return
-                 =<< (liftIO . try . B.readFile $ gfShdFn)
+                 =<< (liftIO . try . B.readFile $ srShdFn)
     -- Generate several shader variations through GLSL's pre-processor
-    forM_ [ (gfDECornellBoxShd, "#define CORNELL_BOX_SCENE"                 )
-          , (gfDETestShd      , ""                                          )
-          , (gfMBPower8Shd    , "#define MANDELBULB_SCENE\n#define POWER8\n")
-          , (gfMBGeneralShd   , "#define MANDELBULB_SCENE\n"                )
+    forM_ [ (srDECornellBoxShd, "#define CORNELL_BOX_SCENE"                 )
+          , (srDETestShd      , ""                                          )
+          , (srMBPower8Shd    , "#define MANDELBULB_SCENE\n#define POWER8\n")
+          , (srMBGeneralShd   , "#define MANDELBULB_SCENE\n"                )
           ]
           $ \(shd, defines) ->
                 let src = "#version 330 core\n" <> defines <> fsSrc
@@ -146,16 +146,16 @@ buildPreConvolvedHDREnvMapCache reflMap powfn = do
                 (removeFile fn) -- Delete cache image file on error / cancellation
             traceS TLInfo $ printf "Written '%s' in %.2fs" (takeFileName fn) timeWritten
 
-drawGPUFractal3D :: GPUFractal3D -> FractalShader -> Maybe Int -> Int -> Int -> Double -> IO ()
-drawGPUFractal3D GPUFractal3D { .. } shdEnum tileIdx w h time = do
+drawShaderTile :: ShaderRenderer -> FragmentShader -> Maybe Int -> Int -> Int -> Double -> IO ()
+drawShaderTile ShaderRenderer { .. } shdEnum tileIdx w h time = do
     -- We need a dummy VAO active with all vertex attributes disabled
-    GL.bindVertexArrayObject GL.$= Just gfVAO
+    GL.bindVertexArrayObject GL.$= Just srVAO
     -- Bind shader
     let shd = case shdEnum of
-                  FSDECornellBoxShader -> gfDECornellBoxShd
-                  FSDETestShader       -> gfDETestShd
-                  FSMBPower8Shader     -> gfMBPower8Shd
-                  FSMBGeneralShader    -> gfMBGeneralShd
+                  FSDECornellBoxShader -> srDECornellBoxShd
+                  FSDETestShader       -> srDETestShd
+                  FSMBPower8Shader     -> srMBPower8Shd
+                  FSMBGeneralShader    -> srMBGeneralShd
     GL.currentProgram GL.$= Just shd
     -- Only set shader parameters on the first tile, don't want them to change
     -- over the course of a single frame
@@ -168,10 +168,10 @@ drawGPUFractal3D GPUFractal3D { .. } shdEnum tileIdx w h time = do
                uniformFloat "in_screen_hgt" $ fromIntegral h
                uniformFloat "in_time"       $ realToFrac time
         -- Setup environment cube maps
-        forM_ (zip gfEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
+        forM_ (zip srEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
             setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
         -- Cornell box geometry texture
-        setTextureShader gfCornellBoxGeomTex GL.Texture1D (length gfEnvCubeMaps) shd "cornell_geom"
+        setTextureShader srCornellBoxGeomTex GL.Texture1D (length srEnvCubeMaps) shd "cornell_geom"
     -- Don't need any VBO etc, the vertex shader will make this a proper quad.
     -- Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)

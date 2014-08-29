@@ -18,7 +18,7 @@ import Timing
 import Font
 import FrameBuffer
 import QuadRendering
-import GPUFractal3D
+import ShaderRendering
 import FileModChecker
 import qualified BoundedSequence as BS
 
@@ -50,16 +50,16 @@ main = do
       _aeGLFWEventsQueue <- newTQueueIO :: IO (TQueue GLFWEvent)
       let w = 512
           h = 512
-          fractalShdFn = "./fractal_3d.shd"
-          reflMapFn    = "./latlong_envmaps/uffizi-large.hdr"
+          shdFn     = "./fragment.shd"
+          reflMapFn = "./latlong_envmaps/uffizi-large.hdr"
        in withWindow w h "Viewer" _aeGLFWEventsQueue $ \_aeWindow ->
           withFontTexture $ \_aeFontTexture ->
           withFrameBuffer w h HighQualityDownscaling $ \_aeFB ->
           withQuadRenderer 16384 $ \_aeQR ->
-          withGPUFractal3D fractalShdFn reflMapFn $ \_aeGPUFrac3D -> do
+          withShaderRenderer shdFn reflMapFn $ \_aeSR -> do
             traceSystemInfo
             _asCurTick          <- getTick
-            _aeShaderModChecker <- checkModifedAsync fractalShdFn 0.5
+            _aeShaderModChecker <- checkModifedAsync shdFn 0.5
             let as = AppState { _asLastEscPress   = -1
                               , _asFrameTimes     = BS.empty 60 -- Average over last N FPS
                               , _asMode           = ModeDETestShader

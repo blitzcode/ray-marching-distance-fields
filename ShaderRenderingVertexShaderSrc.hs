@@ -1,8 +1,8 @@
 
 {-# LANGUAGE QuasiQuotes #-}
 
-module GPUFractal3DShaderSource ( vsSrcFSQuad
-                                ) where
+module ShaderRenderingVertexShaderSrc ( vsSrcFSQuad
+                                      ) where
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE

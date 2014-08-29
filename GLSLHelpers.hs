@@ -1,12 +1,12 @@
 
 {-# LANGUAGE FlexibleContexts, LambdaCase #-}
 
-module Shaders ( mkShaderProgram
-               , compileShaderProgram
-               , tryMkShaderResource
-               , setTextureShader
-               , setOrtho2DProjMatrix
-               ) where
+module GLSLHelpers ( mkShaderProgram
+                   , compileShaderProgram
+                   , tryMkShaderResource
+                   , setTextureShader
+                   , setOrtho2DProjMatrix
+                   ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR

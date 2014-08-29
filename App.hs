@@ -10,7 +10,6 @@ module App ( AppState(..)
              -- Export to silence warnings
            , aeFontTexture
            , aeQR
-           , aeGPUFrac3D
            ) where
 
 import Control.Lens
@@ -32,7 +31,7 @@ import Trace
 import Font
 import FrameBuffer
 import Fractal2D
-import GPUFractal3D
+import ShaderRendering
 import QuadRendering
 import qualified BoundedSequence as BS
 
@@ -62,7 +61,7 @@ data AppEnv = AppEnv { _aeWindow           :: GLFW.Window
                      , _aeFontTexture      :: GL.TextureObject
                      , _aeFB               :: FrameBuffer
                      , _aeQR               :: QuadRenderer
-                     , _aeGPUFrac3D        :: GPUFractal3D
+                     , _aeSR               :: ShaderRenderer
                      , _aeShaderModChecker :: IO Bool
                      }
 
@@ -149,21 +148,21 @@ draw = do
         GL.clearColor GL.$= (GL.Color4 1 0 1 1 :: GL.Color4 GL.GLclampf)
         GL.clear [GL.ColorBuffer, GL.DepthBuffer]
         GL.depthFunc GL.$= Just GL.Lequal
-    -- Draw fractal into our frame buffer texture
+    -- Draw shader into our frame buffer texture
     let fillFB              = void . fillFrameBuffer _aeFB
         drawFB              = void . drawIntoFrameBuffer _aeFB
         tileIdx | _asTiling = Just _asFrameIdx
                 | otherwise = Nothing
-        drawGPUFractal shd w h = drawGPUFractal3D _aeGPUFrac3D shd tileIdx w h _asCurTick
+        drawShader shd w h = drawShaderTile _aeSR shd tileIdx w h _asCurTick
      in liftIO $ case _asMode of
         ModeJuliaAnim          -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec False _asCurTick
         ModeJuliaAnimSmooth    -> fillFB $ \w h fbVec -> juliaAnimated w h fbVec True  _asCurTick
         ModeMandelBrot         -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec False
         ModeMandelBrotSmooth   -> fillFB $ \w h fbVec -> mandelbrot    w h fbVec True
-        ModeDECornellBoxShader -> drawFB $ \w h       -> drawGPUFractal FSDECornellBoxShader w h
-        ModeDETestShader       -> drawFB $ \w h       -> drawGPUFractal FSDETestShader       w h
-        ModeMBPower8Shader     -> drawFB $ \w h       -> drawGPUFractal FSMBPower8Shader     w h
-        ModeMBGeneralShader    -> drawFB $ \w h       -> drawGPUFractal FSMBGeneralShader    w h
+        ModeDECornellBoxShader -> drawFB $ \w h       -> drawShader FSDECornellBoxShader w h
+        ModeDETestShader       -> drawFB $ \w h       -> drawShader FSDETestShader       w h
+        ModeMBPower8Shader     -> drawFB $ \w h       -> drawShader FSMBPower8Shader     w h
+        ModeMBGeneralShader    -> drawFB $ \w h       -> drawShader FSMBGeneralShader    w h
     -- Render everything quad based
     (liftIO $ GLFW.getFramebufferSize _aeWindow) >>= \(w, h) ->
         void . withQuadRenderBuffer _aeQR w h $ \qb -> do
@@ -248,7 +247,7 @@ checkShaderModified = do
     checker  <- view aeShaderModChecker
     modified <- liftIO checker
     when modified $
-        view aeGPUFrac3D >>= liftIO . loadAndCompileShaders >>=
+        view aeSR >>= liftIO . loadAndCompileShaders >>=
             \case Left err -> do liftIO . traceS TLError $ "Failed to reload shaders:\n" ++ err
                                  asLastShdErr .= err
                   Right s  -> do liftIO . traceS TLInfo $ printf "Reloaded shaders in %.2fs" s

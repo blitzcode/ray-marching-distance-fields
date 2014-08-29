@@ -40,7 +40,7 @@ import Text.Printf
 
 import Trace
 import GLHelpers
-import Shaders
+import GLSLHelpers
 import QuadShaderSource
 import QuadTypes
 
