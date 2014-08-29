@@ -65,10 +65,13 @@ withFrameBuffer w h fbDownscaling f = do
              GL.framebufferTexture2D GL.Framebuffer (GL.ColorAttachment 0) GL.Texture2D fbTex 0
              GL.drawBuffer GL.$= GL.FBOColorAttachment 0
              GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
+             -- Setup texture, dimensions
+             fbDim <- newIORef (0, 0)
+             let fb = FrameBuffer { .. }
+             resizeFrameBuffer fb w h
              -- Inner
              traceOnGLError $ Just "withFrameBuffer begin inner"
-             fbDim <- newIORef (w, h)
-             f FrameBuffer { .. }
+             f fb
     traceOnGLError $ Just "withFrameBuffer after cleanup"
     return r
 
@@ -92,7 +95,10 @@ resizeFrameBuffer fb w h = do
                              , clampWH - hdiff
                              )
      in writeIORef (fbDim fb) (clampHW, clampHH)
-    -- Clear contents to black (drawing allocates resources as well)
+    -- Allocate texture and clear contents to black
+    GL.textureBinding GL.Texture2D GL.$= Just (fbTex fb)
+    texImage2DNullPtr w h
+    GL.textureBinding GL.Texture2D GL.$= Nothing
     void . drawIntoFrameBuffer fb $ \_ _ -> do
         GL.clearColor GL.$= (GL.Color4 0 0 0 1 :: GL.Color4 GL.GLclampf)
         GL.clear [GL.ColorBuffer]
@@ -159,9 +165,7 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
     oldVP <- liftIO $ GL.get GL.viewport
     control $ \run -> finally
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= fbFBO
-             GL.textureBinding  GL.Texture2D   GL.$= Just fbTex
              (w, h) <- readIORef fbDim
-             texImage2DNullPtr w h
              setupViewport w h
              -- GL.framebufferStatus is unfortunately broken in OpenGL 2.9.2.0
              -- (see https://github.com/haskell-opengl/OpenGL/issues/51), so
