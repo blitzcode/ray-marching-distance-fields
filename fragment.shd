@@ -978,7 +978,32 @@ void main()
 #endif
 
     // Trace and shade
-    vec3 color = render_ray(origin, dir, camera);
+    vec3 color;
+//#define RAY_TRACING_TEST
+#ifdef RAY_TRACING_TEST
+    // Ray trace Cornell box
+    float mint = 999;
+    vec3 n;
+
+    for (int i=0; i<32; i++)
+    {
+        vec3 v0 = texelFetch(cornell_geom, i * 3 + 0, 0).xyz;
+        vec3 v1 = texelFetch(cornell_geom, i * 3 + 1, 0).xyz;
+        vec3 v2 = texelFetch(cornell_geom, i * 3 + 2, 0).xyz;
+
+        float t, u, v;
+        if (intersect_triangle(origin, dir, v0, v1, v2, t, u, v))
+            if (t < mint)
+            {
+                n    = normalize(cross(v1 - v0, v2 - v0));
+                mint = t;
+            }
+    }
+
+    color = (mint == 999) ? texture(env_reflection, dir).xyz : (n + 1) * 0.5;
+#else
+    color = render_ray(origin, dir, camera);
+#endif
 
     // Use screen-space derivatives to check the contrast between neighbouring pixels,
     // keep shooting more rays till it passes below a threshold. Works OK from an image
