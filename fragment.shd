@@ -285,22 +285,19 @@ bool compute_barycentric(vec3 pos, vec3 v0, vec3 v1, vec3 v2, out float u, out f
     //
     // Source: http://www.blackpawn.com/texts/pointinpoly/
 
-    // Compute vectors
     vec3 e0 = v2 - v0;
     vec3 e1 = v1 - v0;
     vec3 e2 = pos - v0;
 
-    // Compute dot products
     float dot00 = dot(e0, e0);
     float dot01 = dot(e0, e1);
     float dot02 = dot(e0, e2);
     float dot11 = dot(e1, e1);
     float dot12 = dot(e1, e2);
 
-    // Compute barycentric coordinates
-    float invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
-    u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-    v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    float inv_denom = 1 / (dot00 * dot11 - dot01 * dot01);
+    u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
+    v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
 
     // Check if point is in triangle
     return (u >= 0) && (v >= 0) && (u + v < 1);
@@ -310,7 +307,8 @@ float de_triangle(vec3 pos, vec3 v0, vec3 v1, vec3 v2)
 {
     // Compute the distance between a point and a triangle. This is either the closest
     // point on the plane (if it is inside the triangle), or the closest point on any of
-    // the three edges
+    // the three edges. Note that if we remove the 'inside triangle' case we get a DE for
+    // the edges only, allowing us to produce a wireframe rendering
 
     float u, v;
     if (compute_barycentric(pos, v0, v1, v2, u, v))
