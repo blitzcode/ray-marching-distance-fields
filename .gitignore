@@ -1,6 +1,6 @@
 .cabal-sandbox/
 cabal.sandbox.config
 dist/
-mandelbulb.prof
+rmdf.prof
 *.png
 latlong_envmaps/*.hdr
