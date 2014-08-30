@@ -65,7 +65,6 @@
 // TODO: Stop / slow down rendering if window loses focus
 // TODO: Speed up load time by loading and converting environment map texture in a
 //       background thread, display white or a cached scale version in the meantime
-// TODO: Fix artifacts in the Cornell Box scene
 
 // '#version 330 core' defined externally when we generate variations of this shader
 
@@ -226,8 +225,6 @@ bool intersect_triangle( vec3 orig
     //
     // http://www.jcenligne.fr/download/little3d/
     //     jgt%20Fast,%20Minumum%20Storage%20Ray-Triangle%20Intersection.htm
-    //
-    // TODO: Currently not used
 
     const float JGT_RAYTRI_EPSILON = 0.000001;
 
@@ -245,7 +242,7 @@ bool intersect_triangle( vec3 orig
     det = dot(edge1, pvec);
 
     if (det > -JGT_RAYTRI_EPSILON && det < JGT_RAYTRI_EPSILON)
-      return false;
+        return false;
     inv_det = 1.0 / det;
 
     // Calculate distance from vert0 to ray origin
@@ -254,7 +251,7 @@ bool intersect_triangle( vec3 orig
     // Calculate U parameter and test bounds
     u = dot(tvec, pvec) * inv_det;
     if (u < 0.0 || u > 1.0)
-      return false;
+        return false;
 
     // Prepare to test V parameter
     qvec = cross(tvec, edge1);
@@ -262,7 +259,7 @@ bool intersect_triangle( vec3 orig
     // Calculate V parameter and test bounds
     v = dot(dir, qvec) * inv_det;
     if (v < 0.0 || u + v > 1.0)
-      return false;
+        return false;
 
     // Calculate t, ray intersects triangle
     t = dot(edge2, qvec) * inv_det;
@@ -270,252 +267,63 @@ bool intersect_triangle( vec3 orig
     return true;
 }
 
-float de_triangle(vec3 point, vec3 v0, vec3 v1, vec3 v2)
+float line_seg_min_dist_sq(vec3 a, vec3 b, vec3 p)
 {
-    // http://www.geometrictools.com/GTEngine/Include/GteDistPoint3Triangle3.inl
-    // http://www.geometrictools.com/Documentation/DistancePoint3Triangle3.pdf
+    // Squared distance to the closest point from p on the line segment a b
+    vec3  ab = b - a;
+    float len_sq = dot(ab, ab);
+    float t = dot(p - a, ab) / len_sq;
+    t = clamp(t, 0, 1);
+    vec3 proj = a + t * ab;
+    return dot(p-proj, p-proj);
+}
+
+bool compute_barycentric(vec3 pos, vec3 v0, vec3 v1, vec3 v2, out float u, out float v)
+{
+    // Compute the barycentric coordinates of a point, return if the point is inside
+    // the triangle, or more accurate, inside its triangular prism
     //
-    // Geometric Tools LLC, Redmond WA 98052
-    // Copyright (c) 1998-2014
-    // Distributed under the Boost Software License, Version 1.0.
-    // http://www.boost.org/LICENSE_1_0.txt
+    // Source: http://www.blackpawn.com/texts/pointinpoly/
 
-    float sqrDistance;
+    // Compute vectors
+    vec3 e0 = v2 - v0;
+    vec3 e1 = v1 - v0;
+    vec3 e2 = pos - v0;
 
-    vec3 diff = v0 - point;
-    vec3 edge0 = v1 - v0;
-    vec3 edge1 = v2 - v0;
-    float a00 = dot(edge0, edge0);
-    float a01 = dot(edge0, edge1);
-    float a11 = dot(edge1, edge1);
-    float b0 = dot(diff, edge0);
-    float b1 = dot(diff, edge1);
-    float c = dot(diff, diff);
-    float det = abs(a00*a11 - a01*a01);
-    float s = a01*b1 - a11*b0;
-    float t = a01*b0 - a00*b1;
+    // Compute dot products
+    float dot00 = dot(e0, e0);
+    float dot01 = dot(e0, e1);
+    float dot02 = dot(e0, e2);
+    float dot11 = dot(e1, e1);
+    float dot12 = dot(e1, e2);
 
-    if (s + t <= det)
+    // Compute barycentric coordinates
+    float invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+    u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+    // Check if point is in triangle
+    return (u >= 0) && (v >= 0) && (u + v < 1);
+}
+
+float de_triangle(vec3 pos, vec3 v0, vec3 v1, vec3 v2)
+{
+    // Compute the distance between a point and a triangle. This is either the closest
+    // point on the plane (if it is inside the triangle), or the closest point on any of
+    // the three edges
+
+    float u, v;
+    if (compute_barycentric(pos, v0, v1, v2, u, v))
     {
-        if (s < float(0))
-        {
-            if (t < float(0))  // region 4
-            {
-                if (b0 < float(0))
-                {
-                    t = float(0);
-                    if (-b0 >= a00)
-                    {
-                        s = float(1);
-                        sqrDistance = a00 + (float(2))*b0 + c;
-                    }
-                    else
-                    {
-                        s = -b0 / a00;
-                        sqrDistance = b0*s + c;
-                    }
-                }
-                else
-                {
-                    s = float(0);
-                    if (b1 >= float(0))
-                    {
-                        t = float(0);
-                        sqrDistance = c;
-                    }
-                    else if (-b1 >= a11)
-                    {
-                        t = float(1);
-                        sqrDistance = a11 + (float(2))*b1 + c;
-                    }
-                    else
-                    {
-                        t = -b1 / a11;
-                        sqrDistance = b1*t + c;
-                    }
-                }
-            }
-            else  // region 3
-            {
-                s = float(0);
-                if (b1 >= float(0))
-                {
-                    t = float(0);
-                    sqrDistance = c;
-                }
-                else if (-b1 >= a11)
-                {
-                    t = float(1);
-                    sqrDistance = a11 + (float(2))*b1 + c;
-                }
-                else
-                {
-                    t = -b1 / a11;
-                    sqrDistance = b1*t + c;
-                }
-            }
-        }
-        else if (t < float(0))  // region 5
-        {
-            t = float(0);
-            if (b0 >= float(0))
-            {
-                s = float(0);
-                sqrDistance = c;
-            }
-            else if (-b0 >= a00)
-            {
-                s = float(1);
-                sqrDistance = a00 + (float(2))*b0 + c;
-            }
-            else
-            {
-                s = -b0 / a00;
-                sqrDistance = b0*s + c;
-            }
-        }
-        else  // region 0
-        {
-            // minimum at interior point
-            float invDet = (float(1)) / det;
-            s *= invDet;
-            t *= invDet;
-            sqrDistance = s*(a00*s + a01*t + (float(2))*b0) +
-                t*(a01*s + a11*t + (float(2))*b1) + c;
-        }
+        vec3 point_on_plane = v2 * u + v1 * v + v0 * (1 - (u + v));
+        return distance(pos, point_on_plane);
     }
     else
     {
-        float tmp0, tmp1, numer, denom;
-
-        if (s < float(0))  // region 2
-        {
-            tmp0 = a01 + b0;
-            tmp1 = a11 + b1;
-            if (tmp1 > tmp0)
-            {
-                numer = tmp1 - tmp0;
-                denom = a00 - (float(2))*a01 + a11;
-                if (numer >= denom)
-                {
-                    s = float(1);
-                    t = float(0);
-                    sqrDistance = a00 + (float(2))*b0 + c;
-                }
-                else
-                {
-                    s = numer / denom;
-                    t = float(1) - s;
-                    sqrDistance = s*(a00*s + a01*t + (float(2))*b0) +
-                        t*(a01*s + a11*t + (float(2))*b1) + c;
-                }
-            }
-            else
-            {
-                s = float(0);
-                if (tmp1 <= float(0))
-                {
-                    t = float(1);
-                    sqrDistance = a11 + (float(2))*b1 + c;
-                }
-                else if (b1 >= float(0))
-                {
-                    t = float(0);
-                    sqrDistance = c;
-                }
-                else
-                {
-                    t = -b1 / a11;
-                    sqrDistance = b1*t + c;
-                }
-            }
-        }
-        else if (t < float(0))  // region 6
-        {
-            tmp0 = a01 + b1;
-            tmp1 = a00 + b0;
-            if (tmp1 > tmp0)
-            {
-                numer = tmp1 - tmp0;
-                denom = a00 - (float(2))*a01 + a11;
-                if (numer >= denom)
-                {
-                    t = float(1);
-                    s = float(0);
-                    sqrDistance = a11 + (float(2))*b1 + c;
-                }
-                else
-                {
-                    t = numer / denom;
-                    s = float(1) - t;
-                    sqrDistance = s*(a00*s + a01*t + (float(2))*b0) +
-                        t*(a01*s + a11*t + (float(2))*b1) + c;
-                }
-            }
-            else
-            {
-                t = float(0);
-                if (tmp1 <= float(0))
-                {
-                    s = float(1);
-                    sqrDistance = a00 + (float(2))*b0 + c;
-                }
-                else if (b0 >= float(0))
-                {
-                    s = float(0);
-                    sqrDistance = c;
-                }
-                else
-                {
-                    s = -b0 / a00;
-                    sqrDistance = b0*s + c;
-                }
-            }
-        }
-        else  // region 1
-        {
-            numer = a11 + b1 - a01 - b0;
-            if (numer <= float(0))
-            {
-                s = float(0);
-                t = float(1);
-                sqrDistance = a11 + (float(2))*b1 + c;
-            }
-            else
-            {
-                denom = a00 - (float(2))*a01 + a11;
-                if (numer >= denom)
-                {
-                    s = float(1);
-                    t = float(0);
-                    sqrDistance = a00 + (float(2))*b0 + c;
-                }
-                else
-                {
-                    s = numer / denom;
-                    t = float(1) - s;
-                    sqrDistance = s*(a00*s + a01*t + (float(2))*b0) +
-                        t*(a01*s + a11*t + (float(2))*b1) + c;
-                }
-            }
-        }
+        return sqrt(min(line_seg_min_dist_sq(v0, v1, pos),
+                    min(line_seg_min_dist_sq(v0, v2, pos),
+                        line_seg_min_dist_sq(v1, v2, pos))));
     }
-
-    // Account for numerical round-off error.
-    if (sqrDistance < float(0))
-    {
-        sqrDistance = float(0);
-    }
-
-    /*
-    distance = sqrt(sqrDistance);
-    triangleClosestPoint = triangle.v[0] + s*edge0 + t*edge1;
-    triangleParameter[1] = s;
-    triangleParameter[2] = t;
-    triangleParameter[0] = float(1) - s - t;
-    */
-
-    return sqrt(sqrDistance);
 }
 
 float de_cornell_box(vec3 pos)
@@ -526,12 +334,6 @@ float de_cornell_box(vec3 pos)
     // where the actual code generation / optimization happens, for a very long time
     // (see http://lists.apple.com/archives/mac-opengl/2008/Nov/msg00003.html).
     // So here we store the vertices in a floating-point texture instead
-    //
-    // TODO: For some reason, the FD normal computation doesn't work at all with this DE
-    //       unless we're using a giant epsilon. The DE seems to work in general, and it
-    //       isn't immediately clear why the axis-aligned DE computations would be
-    //       extremely noisy for an axis-aligned triangle with plenty of ray back stepping
-    //
     float dist = 10000;
     for (int i=0; i<32; i++)
     {
@@ -888,6 +690,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         //color = vec3(fresnel);
         //color = vec3(ao);
         //color = vec3(1,0,1);
+        //color = (isec_n + 1) * 0.5;
 
         return color;
     }
@@ -981,7 +784,7 @@ void main()
     vec3 color;
 //#define RAY_TRACING_TEST
 #ifdef RAY_TRACING_TEST
-    // Ray trace Cornell box
+    // Ray trace Cornell Box
     float mint = 999;
     vec3 n;
 
