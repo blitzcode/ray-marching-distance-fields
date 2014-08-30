@@ -326,13 +326,14 @@ float de_triangle(vec3 pos, vec3 v0, vec3 v1, vec3 v2)
 
 float de_cornell_box(vec3 pos)
 {
-    // Trying to store the array with the Cornell Box geometry as literal data caused
-    // issues. The compiler tries to unroll the entire loop, inlining the fairly
-    // complicated de_triangle() function 32 times. This will stall glUseProgram(),
-    // where the actual code generation / optimization happens, for a very long time
-    // (see http://lists.apple.com/archives/mac-opengl/2008/Nov/msg00003.html).
-    // So here we store the vertices in a floating-point texture instead
-    float dist = 10000;
+    // Trying to store the array with the Cornell Box geometry as literal data caused issues.
+    // The compiler tries to unroll the entire loop, inlining the de_triangle() function 32
+    // times. This will stall glUseProgram(), where the actual code generation / optimization
+    // happens, for a very long time (see
+    // http://lists.apple.com/archives/mac-opengl/2008/Nov/msg00003.html). Also, in general
+    // indexing into a large constant array seems to be something that doesn't map well to
+    // shader hardware, so here we store the vertices in a floating-point texture instead
+    float dist = 999;
     for (int i=0; i<32; i++)
     {
         dist = min(dist, de_triangle(pos, texelFetch(cornell_geom, i * 3 + 0, 0).xyz,
@@ -375,71 +376,71 @@ const vec3 gd_n18 = vec3( 0.851,  0.526,  0.000);
 const vec3 gd_n19 = vec3(-0.851,  0.526,  0.000);
 float de_octahedral(vec3 p, float e, float r)
 {
-    float s = pow(abs(dot(p,gd_n4)),e);
-    s += pow(abs(dot(p,gd_n5)),e);
-    s += pow(abs(dot(p,gd_n6)),e);
-    s += pow(abs(dot(p,gd_n7)),e);
-    s = pow(s, 1./e);
-    return s-r;
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 float de_dodecahedral(vec3 p, float e, float r)
 {
-    float s = pow(abs(dot(p,gd_n14)),e);
-    s += pow(abs(dot(p,gd_n15)),e);
-    s += pow(abs(dot(p,gd_n16)),e);
-    s += pow(abs(dot(p,gd_n17)),e);
-    s += pow(abs(dot(p,gd_n18)),e);
-    s += pow(abs(dot(p,gd_n19)),e);
-    s = pow(s, 1./e);
-    return s-r;
+    float s = pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 float de_icosahedral(vec3 p, float e, float r)
 {
-    float s = pow(abs(dot(p,gd_n4)),e);
-    s += pow(abs(dot(p,gd_n5)),e);
-    s += pow(abs(dot(p,gd_n6)),e);
-    s += pow(abs(dot(p,gd_n7)),e);
-    s += pow(abs(dot(p,gd_n8)),e);
-    s += pow(abs(dot(p,gd_n9)),e);
-    s += pow(abs(dot(p,gd_n10)),e);
-    s += pow(abs(dot(p,gd_n11)),e);
-    s += pow(abs(dot(p,gd_n12)),e);
-    s += pow(abs(dot(p,gd_n13)),e);
-    s = pow(s, 1./e);
-    return s-r;
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 float de_toctahedral(vec3 p, float e, float r)
 {
-    float s = pow(abs(dot(p,gd_n1)),e);
-    s += pow(abs(dot(p,gd_n2)),e);
-    s += pow(abs(dot(p,gd_n3)),e);
-    s += pow(abs(dot(p,gd_n4)),e);
-    s += pow(abs(dot(p,gd_n5)),e);
-    s += pow(abs(dot(p,gd_n6)),e);
-    s += pow(abs(dot(p,gd_n7)),e);
-    s = pow(s, 1./e);
-    return s-r;
+    float s = pow(abs(dot(p, gd_n1)), e);
+    s += pow(abs(dot(p, gd_n2)), e);
+    s += pow(abs(dot(p, gd_n3)), e);
+    s += pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 float de_ticosahedral(vec3 p, float e, float r)
 {
-    float s = pow(abs(dot(p,gd_n4)),e);
-    s += pow(abs(dot(p,gd_n5)),e);
-    s += pow(abs(dot(p,gd_n6)),e);
-    s += pow(abs(dot(p,gd_n7)),e);
-    s += pow(abs(dot(p,gd_n8)),e);
-    s += pow(abs(dot(p,gd_n9)),e);
-    s += pow(abs(dot(p,gd_n10)),e);
-    s += pow(abs(dot(p,gd_n11)),e);
-    s += pow(abs(dot(p,gd_n12)),e);
-    s += pow(abs(dot(p,gd_n13)),e);
-    s += pow(abs(dot(p,gd_n14)),e);
-    s += pow(abs(dot(p,gd_n15)),e);
-    s += pow(abs(dot(p,gd_n16)),e);
-    s += pow(abs(dot(p,gd_n17)),e);
-    s += pow(abs(dot(p,gd_n18)),e);
-    s += pow(abs(dot(p,gd_n19)),e);
-    s = pow(s, 1./e);
-    return s-r;
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s += pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 
 float distance_estimator(vec3 pos)
