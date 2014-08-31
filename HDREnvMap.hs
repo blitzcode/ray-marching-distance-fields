@@ -26,6 +26,7 @@ import Linear
 import GLHelpers
 import CoordTransf
 import Trace
+import ConcurrentSegments
 
 loadHDRImage :: FilePath -> IO (Either String (JP.Image JP.PixelRGBF))
 loadHDRImage fn = do
@@ -105,10 +106,9 @@ pixelAtBilinear img u v =
         vRatio    = upy - fromIntegral y
         uOpposite = 1 - uRatio
         vOpposite = 1 - vRatio
-        -- TODO: Switch to unsafe operations
-        -- tex xc yc = case JP.unsafePixelAt (JP.imageData img) (xc * 3 + yc * w * 3) of
-        --                 (JP.PixelRGBF r g b) -> V3 r g b
-        tex xc yc = case JP.pixelAt img xc yc of (JP.PixelRGBF r g b) -> V3 r g b
+        tex xc yc = case JP.unsafePixelAt (JP.imageData img) (xc * 3 + yc * w * 3) of
+                        (JP.PixelRGBF r g b) -> V3 r g b
+        -- tex xc yc = case JP.pixelAt img xc yc of (JP.PixelRGBF r g b) -> V3 r g b
      in (tex x y   ^* uOpposite + tex xp1 y   ^* uRatio) ^* vOpposite +
         (tex x yp1 ^* uOpposite + tex xp1 yp1 ^* uRatio) ^* vRatio
 
@@ -117,10 +117,7 @@ pixelAtBilinear img u v =
 -- for the resampling, introducing artifacts in the process. Results look fairly good, though
 latLongHDREnvMapToCubeMap :: JP.Image JP.PixelRGBF -> Bool -> IO GL.TextureObject
 latLongHDREnvMapToCubeMap latlong debugFaceColorize =
-  bracketOnError
-    GL.genObjectName
-    GL.deleteObjectName
-    $ \tex -> do
+    bracketOnError GL.genObjectName GL.deleteObjectName $ \tex -> do
         -- Setup cube map
         GL.textureBinding GL.TextureCubeMap GL.$= Just tex
         setTextureFiltering GL.TextureCubeMap TFMagOnly
@@ -138,29 +135,30 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
               , GL.TextureCubeMapPositiveZ
               , GL.TextureCubeMapNegativeZ
               ] $ \face -> do
-          faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V3 Float))
-          forM_ [0..w - 1] $ \y -> forM_ [0..w - 1] $ \x ->
-              let idx          = x + y * w
-                  -- Convert from a cube map texel to a lat./long. environment map texel
-                  dir          = cubeMapPixelToDir face size x y
-                  (theta, phi) = cartesianToSpherical $ worldToLocal dir
-                  (u, v)       = sphericalToEnvironmentUV theta phi
-                  -- Lookup source texel
-                  col          = pixelAtBilinear latlong u v
-                  -- We can colorize the faces of the cube for debugging purposes
-                  colFace      = case face of GL.TextureCubeMapPositiveX -> V3 1 0 0 -- Red
-                                              GL.TextureCubeMapNegativeX -> V3 0 1 0 -- Green
-                                              GL.TextureCubeMapPositiveY -> V3 0 0 1 -- Blue
-                                              GL.TextureCubeMapNegativeY -> V3 1 0 1 -- Pink
-                                              GL.TextureCubeMapPositiveZ -> V3 1 1 0 -- Yellow
-                                              GL.TextureCubeMapNegativeZ -> V3 0 1 1 -- Cyan
-               in VSM.write faceImg idx $ V3 (col ^. _x) (col ^. _y) (col ^. _z) *
-                      if debugFaceColorize then colFace else 1
-                  -- Debug output normal
-                  -- VSM.write faceImg idx $ V3 (dir ^. _x) (dir ^. _y) (dir ^. _z)
-          -- Upload and let OpenGL convert to half floats
-          VSM.unsafeWith faceImg $
-              GL.texImage2D face GL.NoProxy 0 GL.RGB16F size 0 . GL.PixelData GL.RGB GL.Float
+            faceImg <- VSM.new $ w * w :: IO (VSM.IOVector (V3 Float))
+            void $ forSegmentsConcurrently Nothing 0 w $ \start end -> -- In parallel
+                forM_ [start..end - 1] $ \y -> forM_ [0..w - 1] $ \x ->
+                    let idx          = x + y * w
+                        -- Convert from a cube map texel to a lat./long. environment map texel
+                        dir          = cubeMapPixelToDir face size x y
+                        (theta, phi) = cartesianToSpherical $ worldToLocal dir
+                        (u, v)       = sphericalToEnvironmentUV theta phi
+                        -- Lookup source texel
+                        col          = pixelAtBilinear latlong u v
+                        -- We can colorize the faces of the cube for debugging purposes
+                        colFace      = case face of
+                                           GL.TextureCubeMapPositiveX -> V3 1 0 0 -- Red
+                                           GL.TextureCubeMapNegativeX -> V3 0 1 0 -- Green
+                                           GL.TextureCubeMapPositiveY -> V3 0 0 1 -- Blue
+                                           GL.TextureCubeMapNegativeY -> V3 1 0 1 -- Pink
+                                           GL.TextureCubeMapPositiveZ -> V3 1 1 0 -- Yellow
+                                           GL.TextureCubeMapNegativeZ -> V3 0 1 1 -- Cyan
+                     in VSM.write faceImg idx $ col * if debugFaceColorize then colFace else 1
+                        -- Debug output normal
+                        -- VSM.write faceImg idx $ V3 (dir ^. _x) (dir ^. _y) (dir ^. _z)
+            -- Upload and let OpenGL convert to half floats
+            VSM.unsafeWith faceImg $
+                GL.texImage2D face GL.NoProxy 0 GL.RGB16F size 0 . GL.PixelData GL.RGB GL.Float
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
