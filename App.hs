@@ -108,6 +108,7 @@ processGLFWEvent ev =
                 GLFW.Key'T      -> asTiling %= not >> onRenderSettingsChage
                 _               -> return ()
         GLFWEventFramebufferSize {- win -} _ {- w -} _ {- h -} _ -> resize
+        -- TODO: Mouse control for orbiting camera
         -- GLFWEventWindowSize {- win -} _ w h -> do
         --     liftIO $ traceS TLInfo $ printf "Window resized: %i x %i" w h
         --     return ()

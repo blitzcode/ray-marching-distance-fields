@@ -3,7 +3,7 @@
 
 name:                rmdf
 version:             0.1.0.0
-synopsis:            Ray Marched Distance Fields
+synopsis:            Ray Marching Distance Fields
 -- description:
 license:             MIT
 license-file:        LICENSE

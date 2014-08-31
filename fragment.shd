@@ -1,72 +1,7 @@
 
-// Shaders for ray marching distance fields
-
-// -------------------------
-// Main References & Sources
-// -------------------------
-//
-// http://blog.hvidtfeldts.net/index.php/2011/06/distance-estimated-3d-fractals-part-i/
-//
-// http://blog.hvidtfeldts.net/index.php/2011/08/
-//     distance-estimated-3d-fractals-ii-lighting-and-coloring/
-//
-// http://blog.hvidtfeldts.net/index.php/2011/09/distance-estimated-3d-fractals-iv-the-holy-grail/
-//
-// http://blog.hvidtfeldts.net/index.php/2011/09/
-//     distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
-//
-// http://blog.hvidtfeldts.net/index.php/2012/05/distance-estimated-3d-fractals-part-viii-epilogue/
-//
-// http://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
-//
-// http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm
-//
-// http://www.iquilezles.org/www/material/nvscene2008/rwwtt.pdf
-//
-// https://www.shadertoy.com/view/MdfGRr
-
-// TODO: Need to add some form of near plane clipping
-// TODO: Have specialized versions of all the integer powers, i.e.
-//       http://www.fractalforums.com/index.php?action=dlattach;topic=742.0;attach=429;image
-//       http://en.wikipedia.org/wiki/Mandelbulb
-// TODO: Move transformations into vertex shader, like here:
-//       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
-// TODO: Have an on-screen display of tweakable variables, allow run-time modification of
-//       all those little shader settings we tweak manually from the file for now. It
-//       would be OK to use a #define and recompile the shader if uniforms cause a slowdown
-//       for some settings
-// TODO: Mouse control for orbiting camera
-// TODO: Add key to show/hide UI overlay
-// TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
-//       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
-// TODO: Understand and try out some of the other DE methods from
-//       http://blog.hvidtfeldts.net/index.php/2011/09/
-//           distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
-// TODO: Implement some more BRDFs besides Phong/Lambert like Blinn, etc.
-// TODO: Fresnel for dielectrics
-// TODO: Collect epsilons and settings into one place
-// TODO: Could try implementing SSS based on the distance_ao() function
-// TODO: Re-use length(w) term in de_mandelbulb() iteration loop for cartesian_to_spherical()
-//       in triplex_pow()
-// TODO: Maybe add some post-process effects like bloom or some fake motion-blur / DoF
-// TODO: Consider 3D texture cache with DE value in each cell, speeding up ray marching
-//       till we get close to the surface. Might not help that much as the most expensive
-//       DE invocations are the ones close to the surface
-// TODO: Consider a hierarchical Z like setup where we first ray march 4x4 pixel blocks
-//       till we get close to the surface and then start off there at pixel resolution
-//       Also see
-//       http://www.fractalforums.com/mandelbulb-implementation/major-raymarching-optimization/
-// TODO: Check out
-//       http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
-// TODO: See if we can make a cycle detection optimization like for the 2D Mandelbrot
-// TODO: Add some form of tone mapping to the output, exposure controls
-// TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
-//       directional visibility information
-// TODO: Stop / slow down rendering if window loses focus
-// TODO: Speed up load time by loading and converting environment map texture in a
-//       background thread, display white or a cached scale version in the meantime
-
-// '#version 330 core' defined externally when we generate variations of this shader
+// ---------------------------------------------------------
+// Ray marching distance fields plus shading with IBL and AO
+// ---------------------------------------------------------
 
 uniform float in_time;
 uniform float in_screen_wdh;
@@ -143,6 +78,10 @@ vec3 triplex_pow8(vec3 w)
     // http://www.iquilezles.org/www/articles/mandelbulb/mandelbulb.htm
     //
     // (modified so the Mandelbulb has the same orientation as the general triplex_pow() one)
+    //
+    // TODO: Have specialized versions of all the integer powers, i.e.
+    //       http://www.fractalforums.com/index.php?action=dlattach;topic=742.0;attach=429;image
+    //       http://en.wikipedia.org/wiki/Mandelbulb
 
     float x = w.x; float x2 = x*x; float x4 = x2*x2;
     float y = w.y; float y2 = y*y; float y4 = y2*y2;
@@ -161,6 +100,15 @@ vec3 triplex_pow8(vec3 w)
 
 float de_mandelbulb(vec3 pos)
 {
+    // References
+    //
+    // http://www.skytopia.com/project/fractal/mandelbulb.html
+    // http://www.bugman123.com/Hypercomplex/index.html
+    // http://blog.hvidtfeldts.net/index.php/2011/09/
+    //     distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
+    //
+    // TODO: Understand and try out some of the other DE methods from the link above
+
 #ifdef POWER8
     float power = 8;
 #else
@@ -185,6 +133,7 @@ float de_mandelbulb(vec3 pos)
     // vec3 trap = abs(w);
     for (int i=0; i<iterations; i++)
     {
+        // TODO: Re-use length(w) term for cartesian_to_spherical() in triplex_pow()
         r = length(w);
         if (r > bailout)
             break;
@@ -309,6 +258,11 @@ float de_triangle(vec3 pos, vec3 v0, vec3 v1, vec3 v2)
     // point on the plane (if it is inside the triangle), or the closest point on any of
     // the three edges. Note that if we remove the 'inside triangle' case we get a DE for
     // the edges only, allowing us to produce a wireframe rendering
+    //
+    // TODO: Explore some other, potentially faster methods of computing this
+    //       http://www-compsci.swan.ac.uk/~csmark/PDFS/dist.pdf
+    //       http://www.ann.jussieu.fr/~frey/papers/divers/
+    //           Jones%20M.W.,%203d%20distance%20fields,%20a%20survey.pdf
 
     float u, v;
     if (compute_barycentric(pos, v0, v1, v2, u, v))
@@ -333,9 +287,27 @@ float de_cornell_box(vec3 pos)
     // http://lists.apple.com/archives/mac-opengl/2008/Nov/msg00003.html). Also, in general
     // indexing into a large constant array seems to be something that doesn't map well to
     // shader hardware, so here we store the vertices in a floating-point texture instead
+    //
+    // TODO: It would be useful to explore acceleration structures for triangle meshes.
+    //
+    //       Here's a survey with a section on that subject:
+    //
+    //       http://www.ann.jussieu.fr/~frey/papers/divers/
+    //           Jones%20M.W.,%203d%20distance%20fields,%20a%20survey.pdf
+    //
+    //       This approach seems promising:
+    //
+    //       https://graphics.stanford.edu/courses/cs468-03-fall/Papers/
+    //           completeDistanceFieldRep.pdf
+    //
+    //       Rather memory and pre-computation intensive, but the final representation is
+    //       very GPU traversal friendly and there is no loss of precision as with
+    //       the voxelization approaches
+    //
     float dist = 999;
     for (int i=0; i<32; i++)
     {
+        // TODO: We could just compare squared distance and take the sqrt() at the end
         dist = min(dist, de_triangle(pos, texelFetch(cornell_geom, i * 3 + 0, 0).xyz,
                                           texelFetch(cornell_geom, i * 3 + 1, 0).xyz,
                                           texelFetch(cornell_geom, i * 3 + 2, 0).xyz));
@@ -484,6 +456,8 @@ float distance_estimator(vec3 pos)
 }
 
 // http://en.wikipedia.org/wiki/Finite_difference#Forward.2C_backward.2C_and_central_differences
+// http://blog.hvidtfeldts.net/index.php/2011/08/
+//     distance-estimated-3d-fractals-ii-lighting-and-coloring/
 vec3 normal_backward_difference(vec3 pos)
 {
     float c = distance_estimator(pos);
@@ -582,6 +556,8 @@ float distance_ao(vec3 p, vec3 n)
     return occl_sum * occl_sum;
 }
 
+// TODO: Could try implementing SSS based on the distance_ao() function
+
 bool ray_sphere( vec3 origin
                , vec3 dir
                , vec3 spherePos
@@ -612,6 +588,14 @@ bool ray_march( vec3 origin
               )
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
+    //
+    // References:
+    //
+    // http://blog.hvidtfeldts.net/index.php/2011/06/distance-estimated-3d-fractals-part-i/
+    // http://www.iquilezles.org/www/material/nvscene2008/rwwtt.pdf
+
+    // TODO: Adjust ray marching MIN_DIST, FD normal epsilon and ray step back
+    //       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
 
     const int   MAX_STEPS = 128;
     const float MIN_DIST  = 0.001;
@@ -638,6 +622,8 @@ bool ray_march( vec3 origin
     // ray direction if we're looking away from it
     if (t < 0)
         return false;
+
+    // TODO: Need to add some form of near plane clipping
 
     for (int steps=0; steps<MAX_STEPS; steps++)
     {
@@ -687,6 +673,8 @@ float fresnel_conductor( float cosi // Cosine between normal and incident ray
     // Silver   | 0.177 | 3.638
     // Copper   | 0.617 | 2.63
     // Steel    | 2.485 | 3.433
+
+    // TODO: Fresnel for dielectrics
 
     float tmp = (eta * eta + k * k) * cosi * cosi;
     float r_parallel_2 =
@@ -744,6 +732,8 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         // if (dot(-dir, isec_n) < 0.0) // Clearly wrong normal?
         //     isec_n = isec_n_ss; // Switch to screen space normal
 
+        // TODO: Better IBL + AO by doing occlusion for a number of cosine lobes to get
+        //       directional visibility information
 #define DISTANCE_AO
 #ifdef DISTANCE_AO
         float ao = distance_ao(isec_pos, isec_n);
@@ -851,6 +841,14 @@ void generate_ray( mat4x4 camera       // Camera transform
 
 void main()
 {
+    // TODO: Move transformations into vertex shader, like here:
+    //       http://blog.hvidtfeldts.net/index.php/2014/01/combining-ray-tracing-and-polygons/
+
+    // TODO: Consider a hierarchical Z like setup where we first ray march 4x4 pixel blocks
+    //       till we get close to the surface and then start off there at pixel resolution
+    //       Also see
+    //       http://www.fractalforums.com/mandelbulb-implementation/major-raymarching-optimization/
+
     // Orbit camera
     vec3 cam_pos = vec3(0,0,2);
 #define AUTO_ROTATION
@@ -932,5 +930,7 @@ void main()
 #else
     frag_color = vec4(color, 1);
 #endif
+
+    // TODO: Add some form of tone mapping to the output, exposure controls
 }
 

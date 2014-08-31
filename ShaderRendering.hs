@@ -76,6 +76,9 @@ withShaderRenderer srShdFn reflMapFn f = do
                  powfn = map (\pow -> (pow, mkCacheFn pow)) powers -- Power / cache file nm. pairs
              liftIO $ buildPreConvolvedHDREnvMapCache reflMap powfn
              -- Load pre-convolved environment maps, convert to cube maps and upload to GPU
+             --
+             -- TODO: Speed up load time by loading and converting environment map texture in a
+             --       background thread, display white or a cached scale version in the meantime
              let convertAndAllocCM envMap =
                      snd <$> allocate (latLongHDREnvMapToCubeMap envMap False) GL.deleteObjectName
              envCubeMaps <- forM powfn $ \(pow, fn) -> do
@@ -176,8 +179,8 @@ drawShaderTile ShaderRenderer { .. } shdEnum tileIdx w h time = do
     -- Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)
     GLR.glVertexAttrib1f 0 0
-    -- Optionally draw the full screen quad in tiles to prevent shader timeouts and when
-    -- increase UI responsibility we're rendering very complex images or at very high resolution
+    -- Optionally draw the full screen quad in tiles to prevent shader timeouts and increase UI
+    -- responsibility when we're rendering very complex images or at very high resolution
     let (x0, y0, x1, y1) =
             case tileIdx of
                 Nothing   -> (-1, -1, 1, 1)
