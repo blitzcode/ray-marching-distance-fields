@@ -38,7 +38,8 @@ executable rmdf
                        bytestring,
                        containers,
                        async,
-                       JuicyPixels >= 3.1.5.2,
+                       -- Version with the HDR writer bug fix (issue #74)
+                       JuicyPixels >= 3.1.7,
                        template-haskell,
                        resourcet >= 1.1.2.3,
                        directory,
