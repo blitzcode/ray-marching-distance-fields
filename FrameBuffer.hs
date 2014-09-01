@@ -65,7 +65,7 @@ withFrameBuffer w h fbDownscaling f = do
              GL.framebufferTexture2D GL.Framebuffer (GL.ColorAttachment 0) GL.Texture2D fbTex 0
              GL.drawBuffer GL.$= GL.FBOColorAttachment 0
              GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
-             -- Setup texture, dimensions
+             -- Setup dimensions
              fbDim <- newIORef (0, 0)
              let fb = FrameBuffer { .. }
              resizeFrameBuffer fb w h
@@ -163,7 +163,7 @@ drawIntoFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
                     -> m (Maybe a)
 drawIntoFrameBuffer FrameBuffer { .. } f = do
     oldVP <- liftIO $ GL.get GL.viewport
-    control $ \run -> finally
+    r <- control $ \run -> finally
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= fbFBO
              (w, h) <- readIORef fbDim
              setupViewport w h
@@ -180,16 +180,17 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
         )
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
              GL.viewport                       GL.$= oldVP
-             when (fbDownscaling == HighQualityDownscaling) $ do
-                 -- TODO: When rendering tiles we're computing the MIP-chain for the
-                 --       full frame buffer texture after rendering each individual tile.
-                 --       We would need to make the frame buffer tiling aware and render
-                 --       into a tile sized texture (later copied into the full frame
-                 --       buffer) to address this
-                 GL.textureBinding GL.Texture2D GL.$= Just fbTex
-                 GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
-                 GL.textureBinding GL.Texture2D GL.$= Nothing
         )
+    when (fbDownscaling == HighQualityDownscaling) . liftIO $ do
+        -- TODO: When rendering tiles we're computing the MIP-chain for the
+        --       full frame buffer texture after rendering each individual tile.
+        --       We would need to make the frame buffer tiling aware and render
+        --       into a tile sized texture (later copied into the full frame
+        --       buffer) to address this
+        GL.textureBinding GL.Texture2D GL.$= Just fbTex
+        GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
+        GL.textureBinding GL.Texture2D GL.$= Nothing
+    return r
 
 -- Draw quad with frame buffer texture
 drawFrameBuffer :: FrameBuffer -> QuadRenderBuffer -> Float -> Float -> Float -> Float -> IO ()

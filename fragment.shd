@@ -15,6 +15,12 @@ uniform samplerCube env_cos_512;
 
 uniform sampler1D cornell_geom;
 
+uniform sampler2D approach_sphere_tex;
+uniform int in_approach_sphere_mode;
+#define AS_MODE_IGNORE 0
+#define AS_MODE_UPDATE 1
+#define AS_MODE_USE    2
+
 out vec4 frag_color;
 
 // http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
@@ -155,6 +161,99 @@ float de_mandelbulb(vec3 pos)
 
     // Distance estimate from running derivative and escape radius
     return 0.5 * log(r) * r / dr;
+}
+
+// Generalized Distance Functions
+//
+// http://www.pouet.net/topic.php?which=7931&page=1#c365231
+// http://www.viz.tamu.edu/faculty/ergun/research/implicitmodeling/papers/sm99.pdf
+//
+const vec3 gd_n1  = vec3( 1.000,  0.000,  0.000);
+const vec3 gd_n2  = vec3( 0.000,  1.000,  0.000);
+const vec3 gd_n3  = vec3( 0.000,  0.000,  1.000);
+const vec3 gd_n4  = vec3( 0.577,  0.577,  0.577);
+const vec3 gd_n5  = vec3(-0.577,  0.577,  0.577);
+const vec3 gd_n6  = vec3( 0.577, -0.577,  0.577);
+const vec3 gd_n7  = vec3( 0.577,  0.577, -0.577);
+const vec3 gd_n8  = vec3( 0.000,  0.357,  0.934);
+const vec3 gd_n9  = vec3( 0.000, -0.357,  0.934);
+const vec3 gd_n10 = vec3( 0.934,  0.000,  0.357);
+const vec3 gd_n11 = vec3(-0.934,  0.000,  0.357);
+const vec3 gd_n12 = vec3( 0.357,  0.934,  0.000);
+const vec3 gd_n13 = vec3(-0.357,  0.934,  0.000);
+const vec3 gd_n14 = vec3( 0.000,  0.851,  0.526);
+const vec3 gd_n15 = vec3( 0.000, -0.851,  0.526);
+const vec3 gd_n16 = vec3( 0.526,  0.000,  0.851);
+const vec3 gd_n17 = vec3(-0.526,  0.000,  0.851);
+const vec3 gd_n18 = vec3( 0.851,  0.526,  0.000);
+const vec3 gd_n19 = vec3(-0.851,  0.526,  0.000);
+float de_octahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_dodecahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_icosahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_toctahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n1)), e);
+    s += pow(abs(dot(p, gd_n2)), e);
+    s += pow(abs(dot(p, gd_n3)), e);
+    s += pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_ticosahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s += pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
 }
 
 bool intersect_triangle( vec3 orig
@@ -312,6 +411,8 @@ float de_cornell_box(vec3 pos)
                                           texelFetch(cornell_geom, i * 3 + 1, 0).xyz,
                                           texelFetch(cornell_geom, i * 3 + 2, 0).xyz));
     }
+    // dist = min(dist, de_toctahedral(pos + vec3(-0.17, -0.28, -0.03), 40, 0.175));
+    // dist = min(dist, de_ticosahedral(pos + vec3(0.2, 0.05, 0.2), 40, 0.175));
     return dist;
 }
 
@@ -320,99 +421,6 @@ float smin(float a, float b, float k)
     // http://iquilezles.org/www/articles/smin/smin.htm
     float res = exp(-k * a) + exp(-k * b);
     return -log(res) / k;
-}
-
-// Generalized Distance Functions
-//
-// http://www.pouet.net/topic.php?which=7931&page=1#c365231
-// http://www.viz.tamu.edu/faculty/ergun/research/implicitmodeling/papers/sm99.pdf
-//
-const vec3 gd_n1  = vec3( 1.000,  0.000,  0.000);
-const vec3 gd_n2  = vec3( 0.000,  1.000,  0.000);
-const vec3 gd_n3  = vec3( 0.000,  0.000,  1.000);
-const vec3 gd_n4  = vec3( 0.577,  0.577,  0.577);
-const vec3 gd_n5  = vec3(-0.577,  0.577,  0.577);
-const vec3 gd_n6  = vec3( 0.577, -0.577,  0.577);
-const vec3 gd_n7  = vec3( 0.577,  0.577, -0.577);
-const vec3 gd_n8  = vec3( 0.000,  0.357,  0.934);
-const vec3 gd_n9  = vec3( 0.000, -0.357,  0.934);
-const vec3 gd_n10 = vec3( 0.934,  0.000,  0.357);
-const vec3 gd_n11 = vec3(-0.934,  0.000,  0.357);
-const vec3 gd_n12 = vec3( 0.357,  0.934,  0.000);
-const vec3 gd_n13 = vec3(-0.357,  0.934,  0.000);
-const vec3 gd_n14 = vec3( 0.000,  0.851,  0.526);
-const vec3 gd_n15 = vec3( 0.000, -0.851,  0.526);
-const vec3 gd_n16 = vec3( 0.526,  0.000,  0.851);
-const vec3 gd_n17 = vec3(-0.526,  0.000,  0.851);
-const vec3 gd_n18 = vec3( 0.851,  0.526,  0.000);
-const vec3 gd_n19 = vec3(-0.851,  0.526,  0.000);
-float de_octahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5)), e);
-    s += pow(abs(dot(p, gd_n6)), e);
-    s += pow(abs(dot(p, gd_n7)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_dodecahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n14)), e);
-    s += pow(abs(dot(p, gd_n15)), e);
-    s += pow(abs(dot(p, gd_n16)), e);
-    s += pow(abs(dot(p, gd_n17)), e);
-    s += pow(abs(dot(p, gd_n18)), e);
-    s += pow(abs(dot(p, gd_n19)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_icosahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5 )), e);
-    s += pow(abs(dot(p, gd_n6 )), e);
-    s += pow(abs(dot(p, gd_n7 )), e);
-    s += pow(abs(dot(p, gd_n8 )), e);
-    s += pow(abs(dot(p, gd_n9 )), e);
-    s += pow(abs(dot(p, gd_n10)), e);
-    s += pow(abs(dot(p, gd_n11)), e);
-    s += pow(abs(dot(p, gd_n12)), e);
-    s += pow(abs(dot(p, gd_n13)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_toctahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n1)), e);
-    s += pow(abs(dot(p, gd_n2)), e);
-    s += pow(abs(dot(p, gd_n3)), e);
-    s += pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5)), e);
-    s += pow(abs(dot(p, gd_n6)), e);
-    s += pow(abs(dot(p, gd_n7)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_ticosahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5 )), e);
-    s += pow(abs(dot(p, gd_n6 )), e);
-    s += pow(abs(dot(p, gd_n7 )), e);
-    s += pow(abs(dot(p, gd_n8 )), e);
-    s += pow(abs(dot(p, gd_n9 )), e);
-    s += pow(abs(dot(p, gd_n10)), e);
-    s += pow(abs(dot(p, gd_n11)), e);
-    s += pow(abs(dot(p, gd_n12)), e);
-    s += pow(abs(dot(p, gd_n13)), e);
-    s += pow(abs(dot(p, gd_n14)), e);
-    s += pow(abs(dot(p, gd_n15)), e);
-    s += pow(abs(dot(p, gd_n16)), e);
-    s += pow(abs(dot(p, gd_n17)), e);
-    s += pow(abs(dot(p, gd_n18)), e);
-    s += pow(abs(dot(p, gd_n19)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
 }
 
 float distance_estimator(vec3 pos)
@@ -555,6 +563,34 @@ float distance_ao(vec3 p, vec3 n)
     occl_sum = 1 - occl_sum;
     return occl_sum * occl_sum;
 }
+/*
+float distance_ao(vec3 p, vec3 n)
+{
+    float occl_sum = 0.0;
+    float weight, delta;
+
+    weight = 0.1;
+    delta = 0.1;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.2;
+    delta = 0.2;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.125;
+    delta = 0.4;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.0625;
+    delta = 0.5;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    // Magic fudge factor to make dark parts darker and bright parts brighter
+    //occl_sum = (clamp((occl_sum * 2 - 1) * 2.0, -1, 1) + 1) * 0.5;
+    occl_sum = 1 - occl_sum;
+    return occl_sum;// * occl_sum;
+}
+*/
 
 // TODO: Could try implementing SSS based on the distance_ao() function
 
@@ -585,6 +621,7 @@ bool ray_march( vec3 origin
               , vec3 dir
               , out float t             // Intersection T along the ray
               , out float step_gradient // Step count based gradient (for cheap fake AO)
+              , out float dist          // How close we got to the surface
               )
 {
     // Ray march till we come close enough to a surface or exceed the iteration count
@@ -598,7 +635,7 @@ bool ray_march( vec3 origin
     //       based screen projection, like in https://www.shadertoy.com/view/MdfGRr
 
     const int   MAX_STEPS = 128;
-    const float MIN_DIST  = 0.001;
+    float MIN_DIST  = (in_approach_sphere_mode == AS_MODE_UPDATE) ? 0.015 : 0.001;
 
     // First intersect with a bounding sphere. Helps quickly reject rays which can't
     // possibly intersect with the scene and brings our starting point closer
@@ -621,14 +658,15 @@ bool ray_march( vec3 origin
     // Ignore intersections behind the origin, might otherwise render scene with flipped
     // ray direction if we're looking away from it
     if (t < 0)
-        return false;
+        //return false;
+        t = 0;
 
     // TODO: Need to add some form of near plane clipping
 
     for (int steps=0; steps<MAX_STEPS; steps++)
     {
         vec3 pos = origin + t * dir;
-        float dist = distance_estimator(pos);
+        dist = distance_estimator(pos);
         t += dist;
 
         if (t > tspheremax) // Left bounding sphere?
@@ -695,8 +733,8 @@ float normalize_phong_lobe(float power)
 vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 {
     // Ray march
-    float t, step_gradient;
-    bool hit = ray_march(origin, dir, t, step_gradient);
+    float t, step_gradient, dist;
+    bool hit = ray_march(origin, dir, t, step_gradient, dist);
 
     // Can use the iteration count to add a snowy/foggy/glow type effect
     //
@@ -879,58 +917,90 @@ void main()
     generate_ray(camera, vec2(0, 0), false, 45.0 * 1.5, origin, dir);
 #endif
 
-    // Trace and shade
-    vec3 color;
+    if (in_approach_sphere_mode == AS_MODE_UPDATE)
+    {
+        float t, step_gradient, dist;
+        bool hit = ray_march(origin, dir, t, step_gradient, dist);
+
+        //if (hit)
+            frag_color = vec4(origin + dir * t, dist /*0.015*/);
+        //else
+          //  frag_color = vec4(0);
+        //frag_color =
+        //  vec4((gl_FragCoord.xy / vec2(in_screen_wdh/4.0, in_screen_hgt/4.0)), 0, 1);
+        //frag_color =
+         // vec4(mod(in_time, 1), 0, 0, 1);
+    }
+    else
+    {
+        vec4 sphere = texture( approach_sphere_tex
+                            , (gl_FragCoord.xy / vec2(in_screen_wdh, in_screen_hgt))
+                            );
+
+        float tmin, tmax;
+        if (ray_sphere(origin, dir, sphere.xyz, sphere.w, tmin, tmax))
+        {
+            //frag_color = vec4(1,0,1,1); return;
+            frag_color = vec4((normalize((origin + dir * tmin) - sphere.xyz) + 1) * 0.5, 1); return;
+
+            origin += dir * tmax;
+        }
+        //else { frag_color = vec4(0); return; }
+
+        // Trace and shade
+        vec3 color;
 //#define RAY_TRACING_TEST
 #ifdef RAY_TRACING_TEST
-    // Ray trace Cornell Box
-    float mint = 999;
-    vec3 n;
-
-    for (int i=0; i<32; i++)
-    {
-        vec3 v0 = texelFetch(cornell_geom, i * 3 + 0, 0).xyz;
-        vec3 v1 = texelFetch(cornell_geom, i * 3 + 1, 0).xyz;
-        vec3 v2 = texelFetch(cornell_geom, i * 3 + 2, 0).xyz;
-
-        float t, u, v;
-        if (intersect_triangle(origin, dir, v0, v1, v2, t, u, v))
-            if (t < mint)
-            {
-                n    = normalize(cross(v1 - v0, v2 - v0));
-                mint = t;
-            }
-    }
-
-    color = (mint == 999) ? texture(env_reflection, dir).xyz : (n + 1) * 0.5;
+        // Ray trace Cornell Box
+        float mint = 999;
+        vec3 n;
+    
+        for (int i=0; i<32; i++)
+        {
+            vec3 v0 = texelFetch(cornell_geom, i * 3 + 0, 0).xyz;
+            vec3 v1 = texelFetch(cornell_geom, i * 3 + 1, 0).xyz;
+            vec3 v2 = texelFetch(cornell_geom, i * 3 + 2, 0).xyz;
+    
+            float t, u, v;
+            if (intersect_triangle(origin, dir, v0, v1, v2, t, u, v))
+                if (t < mint)
+                {
+                    n    = normalize(cross(v1 - v0, v2 - v0));
+                    mint = t;
+                }
+        }
+    
+        color = (mint == 999) ? texture(env_reflection, dir).xyz : (n + 1) * 0.5;
 #else
-    color = render_ray(origin, dir, camera);
+        color = render_ray(origin, dir, camera);
 #endif
 
-    // Use screen-space derivatives to check the contrast between neighbouring pixels,
-    // keep shooting more rays till it passes below a threshold. Works OK from an image
-    // quality standpoint, but performance is fairly poor due to the heavy cost of
-    // divergence, probably not worth it in practice compared to the naive super sampling
-    // we have on the frame buffer level
+        // Use screen-space derivatives to check the contrast between neighbouring pixels,
+        // keep shooting more rays till it passes below a threshold. Works OK from an image
+        // quality standpoint, but performance is fairly poor due to the heavy cost of
+        // divergence, probably not worth it in practice compared to the naive super sampling
+        // we have on the frame buffer level
 #ifdef ADAPTIVE_SAMPLING
-    float weight = 1.0;
-    while (fwidth(pow(color.r / weight, 1.0 / 2.2) /* gamma */) > 0.3 /* threshold*/ && weight < 32)
-    {
-        // <shoot next ray>
-        // weight += 1;
-    }
-    color /= weight;
-#endif
-
+        float weight = 1.0;
+        while (fwidth(pow(color.r / weight, 1.0 / 2.2) /* gamma */) > 0.3 /* threshold*/ &&
+               weight < 32)
+        {
+            // <shoot next ray>
+            // weight += 1;
+        }
+        color /= weight;
+    #endif
+    
 #define GAMMA_CORRECT
 #ifdef GAMMA_CORRECT
-    // Gamma correct and output
-    vec3 gamma = pow(color, vec3(1.0 / 2.2));
-    frag_color = vec4(gamma, 1);
+        // Gamma correct and output
+        vec3 gamma = pow(color, vec3(1.0 / 2.2));
+        frag_color = vec4(gamma, 1);
 #else
-    frag_color = vec4(color, 1);
+        frag_color = vec4(color, 1);
 #endif
-
-    // TODO: Add some form of tone mapping to the output, exposure controls
+    
+        // TODO: Add some form of tone mapping to the output, exposure controls
+    }
 }
 

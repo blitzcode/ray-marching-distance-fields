@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings, LambdaCase #-}
 
 module ShaderRendering ( withShaderRenderer
                        , loadAndCompileShaders
@@ -25,6 +25,7 @@ import qualified Data.ByteString as B
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLR
 import qualified Codec.Picture as JP
+import Foreign.Ptr
 
 import Trace
 import Timing
@@ -42,6 +43,8 @@ data ShaderRenderer = ShaderRenderer { srVAO               :: !GL.VertexArrayObj
                                      , srMBGeneralShd      :: !GL.Program
                                      , srEnvCubeMaps       :: [(String, GL.TextureObject)]
                                      , srCornellBoxGeomTex :: !GL.TextureObject
+                                     , srApproachSphereTex :: !GL.TextureObject
+                                     , srApproachSphereFBO :: !GL.FramebufferObject
                                      }
 
 data FragmentShader = FSDECornellBoxShader | FSDETestShader | FSMBPower8Shader | FSMBGeneralShader
@@ -96,13 +99,26 @@ withShaderRenderer srShdFn reflMapFn f = do
                  forM ([0..3] :: [Int]) $ \_ ->
                      snd <$> allocate GL.createProgram GL.deleteObjectName
              -- Cornell box geometry texture
-             srCornellBoxGeomTex <-
-                snd <$> allocate mkCornellBoxVerticesTex GL.deleteObjectName
+             srCornellBoxGeomTex <- snd <$> allocate mkCornellBoxVerticesTex GL.deleteObjectName
+             -- Approach sphere texture
+             srApproachSphereTex <- genObjectNameResource
+             liftIO $ do
+                 GL.textureBinding GL.Texture2D GL.$= Just srApproachSphereTex
+                 setTextureFiltering GL.Texture2D TFNone
+                 setTextureClampST GL.Texture2D
+                 GL.textureBinding GL.Texture2D GL.$= Nothing
+             -- Approach sphere FBO
+             srApproachSphereFBO <- genObjectNameResource
+             liftIO $ do
+                 GL.bindFramebuffer GL.Framebuffer GL.$= srApproachSphereFBO
+                 GL.framebufferTexture2D
+                     GL.Framebuffer (GL.ColorAttachment 0) GL.Texture2D srApproachSphereTex 0
+                 GL.drawBuffer GL.$= GL.FBOColorAttachment 0
+                 GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
              -- Record
              let sr = ShaderRenderer { .. }
              -- Shaders
-             shaderTime <- either throwError return
-                               =<< liftIO (loadAndCompileShaders sr)
+             shaderTime <- either throwError return =<< liftIO (loadAndCompileShaders sr)
              -- Statistics
              liftIO . traceS TLInfo $ printf
                 "withShaderRenderer - Shader time: %.2fs, EnvMap time: %.2fs"
@@ -149,6 +165,9 @@ buildPreConvolvedHDREnvMapCache reflMap powfn = do
                 (removeFile fn) -- Delete cache image file on error / cancellation
             traceS TLInfo $ printf "Written '%s' in %.2fs" (takeFileName fn) timeWritten
 
+data ApproachSphereMode = ASIgnore | ASUpdate | ASUse
+                          deriving (Eq, Show, Enum)
+
 drawShaderTile :: ShaderRenderer -> FragmentShader -> Maybe Int -> Int -> Int -> Double -> IO ()
 drawShaderTile ShaderRenderer { .. } shdEnum tileIdx w h time = do
     -- We need a dummy VAO active with all vertex attributes disabled
@@ -160,21 +179,37 @@ drawShaderTile ShaderRenderer { .. } shdEnum tileIdx w h time = do
                   FSMBPower8Shader     -> srMBPower8Shd
                   FSMBGeneralShader    -> srMBGeneralShd
     GL.currentProgram GL.$= Just shd
-    -- Only set shader parameters on the first tile, don't want them to change
-    -- over the course of a single frame
+    -- Only set shader parameters and create resource on the first tile, don't want them
+    -- to change over the course of a single frame
+    let asShrinkFac = 4
+        asW         = w `div` asShrinkFac
+        asH         = h `div` asShrinkFac
     when (case tileIdx of Nothing -> True; Just idx -> isTileIdxFirstTile idx) $ do
         -- Setup uniforms
         let uniformFloat nm val =
                 GL.get (GL.uniformLocation shd nm) >>= \(GL.UniformLocation loc) ->
                     GLR.glUniform1f loc val
-         in do uniformFloat "in_screen_wdh" $ fromIntegral w
-               uniformFloat "in_screen_hgt" $ fromIntegral h
+         in do --uniformFloat "in_screen_wdh" $ fromIntegral w
+               --uniformFloat "in_screen_hgt" $ fromIntegral h
                uniformFloat "in_time"       $ realToFrac time
         -- Setup environment cube maps
         forM_ (zip srEnvCubeMaps ([0..] :: [Int])) $ \((uniformName, tex), tuIdx) -> do
             setTextureShader tex GL.TextureCubeMap tuIdx shd uniformName
         -- Cornell box geometry texture
-        setTextureShader srCornellBoxGeomTex GL.Texture1D (length srEnvCubeMaps) shd "cornell_geom"
+        setTextureShader
+            srCornellBoxGeomTex GL.Texture1D (length srEnvCubeMaps + 0) shd "cornell_geom"
+        -- Approach sphere texture
+        setTextureShader
+            srApproachSphereTex GL.Texture2D (length srEnvCubeMaps + 1) shd "approach_sphere_tex"
+        (texW, texH) <- getCurTex2DSize
+        when (texW /= asW || texH /= asH) $ do
+            GL.texImage2D GL.Texture2D
+                          GL.NoProxy
+                          0
+                          GL.RGBA32F
+                          (GL.TextureSize2D (fromIntegral asW) (fromIntegral asH))
+                          0
+                          (GL.PixelData GL.RGBA GL.Float nullPtr)
     -- Don't need any VBO etc, the vertex shader will make this a proper quad.
     -- Specify one dummy attribute, as some drivers apparently have an issue
     -- with this otherwise (http://stackoverflow.com/a/8041472/1898360)
@@ -194,5 +229,41 @@ drawShaderTile ShaderRenderer { .. } shdEnum tileIdx w h time = do
                                  )
      in GL.get (GL.uniformLocation shd "quad") >>= \(GL.UniformLocation loc) ->
             GLR.glUniform4f loc x0 y0 x1 y1
-    GL.drawArrays GL.TriangleStrip 0 4
+    forM_ [ASUpdate, ASUse] $ \mode -> do
+        GL.get (GL.uniformLocation shd "in_approach_sphere_mode") >>=
+            \(GL.UniformLocation loc) -> GLR.glUniform1i loc . fromIntegral . fromEnum $ mode
+
+        let drawTile = GL.drawArrays GL.TriangleStrip 0 4
+
+        setTransparency TRNone
+
+        let uniformFloat nm val =
+                GL.get (GL.uniformLocation shd nm) >>= \(GL.UniformLocation loc) ->
+                    GLR.glUniform1f loc val
+         in do uniformFloat "in_screen_wdh" $ fromIntegral $ if mode == ASUpdate then asW else w
+               uniformFloat "in_screen_hgt" $ fromIntegral $if mode == ASUpdate then asH else h
+
+        case mode of
+            ASIgnore -> drawTile
+            ASUse    -> drawTile
+            ASUpdate -> do
+
+                oldVP <- liftIO $ GL.get GL.viewport
+                oldFB <- liftIO $ GL.get (GL.bindFramebuffer GL.Framebuffer)
+
+                setupViewport asW asH
+                GL.bindFramebuffer GL.Framebuffer GL.$= srApproachSphereFBO
+                GLR.glCheckFramebufferStatus GLR.gl_FRAMEBUFFER >>= \case
+                    r | r == GLR.gl_FRAMEBUFFER_COMPLETE -> return ()
+                      | otherwise                        ->
+                            traceS TLError $ printf
+                                "drawShaderTile, glCheckFramebufferStatus: 0x%x"
+                                (fromIntegral r :: Int)
+
+                drawTile
+
+                GL.bindFramebuffer GL.Framebuffer GL.$= oldFB
+                GL.viewport                       GL.$= oldVP
+
+
 
