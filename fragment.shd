@@ -622,10 +622,7 @@ bool ray_march( vec3 origin
 
     // Ignore intersections behind the origin, might otherwise render scene with flipped
     // ray direction if we're looking away from it
-    if (t < 0)
-        return false;
-
-    // TODO: Need to add some form of near plane clipping
+    t = max(0, t);
 
     for (int steps=0; steps<MAX_STEPS; steps++)
     {
