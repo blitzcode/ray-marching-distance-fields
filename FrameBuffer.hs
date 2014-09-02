@@ -94,10 +94,10 @@ resizeFrameBuffer fb w h = do
         (clampHW, clampHH) = ( truncate $ fromIntegral clampWW - fromIntegral hdiff * aspect
                              , clampWH - hdiff
                              )
-     in writeIORef (fbDim fb) (clampHW, clampHH)
+    writeIORef (fbDim fb) (clampHW, clampHH)
     -- Allocate texture and clear contents to black
     GL.textureBinding GL.Texture2D GL.$= Just (fbTex fb)
-    texImage2DNullPtr w h
+    texImage2DNullPtr clampHW clampHH
     GL.textureBinding GL.Texture2D GL.$= Nothing
     void . drawIntoFrameBuffer fb $ \_ _ -> do
         GL.clearColor GL.$= (GL.Color4 0 0 0 1 :: GL.Color4 GL.GLclampf)
