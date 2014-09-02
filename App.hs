@@ -23,6 +23,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf
 import Data.Time
 import Data.List
+import Data.Maybe
 
 import GLFWHelpers
 import GLHelpers
@@ -186,7 +187,7 @@ draw = do
                        )
                        (fromEnum _asMode + 1 :: Int)
                        (fromEnum (maxBound :: Mode) + 1 :: Int)
-                       (show _asMode)
+                       (fromMaybe (show _asMode) . stripPrefix "Mode" $ show _asMode)
                        (if _asTiling then "On" else "Off")
                        _asFBScale
                        fbWdh
