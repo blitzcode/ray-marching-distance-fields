@@ -157,6 +157,99 @@ float de_mandelbulb(vec3 pos)
     return 0.5 * log(r) * r / dr;
 }
 
+// Generalized Distance Functions
+//
+// http://www.pouet.net/topic.php?which=7931&page=1#c365231
+// http://www.viz.tamu.edu/faculty/ergun/research/implicitmodeling/papers/sm99.pdf
+//
+const vec3 gd_n1  = vec3( 1.000,  0.000,  0.000);
+const vec3 gd_n2  = vec3( 0.000,  1.000,  0.000);
+const vec3 gd_n3  = vec3( 0.000,  0.000,  1.000);
+const vec3 gd_n4  = vec3( 0.577,  0.577,  0.577);
+const vec3 gd_n5  = vec3(-0.577,  0.577,  0.577);
+const vec3 gd_n6  = vec3( 0.577, -0.577,  0.577);
+const vec3 gd_n7  = vec3( 0.577,  0.577, -0.577);
+const vec3 gd_n8  = vec3( 0.000,  0.357,  0.934);
+const vec3 gd_n9  = vec3( 0.000, -0.357,  0.934);
+const vec3 gd_n10 = vec3( 0.934,  0.000,  0.357);
+const vec3 gd_n11 = vec3(-0.934,  0.000,  0.357);
+const vec3 gd_n12 = vec3( 0.357,  0.934,  0.000);
+const vec3 gd_n13 = vec3(-0.357,  0.934,  0.000);
+const vec3 gd_n14 = vec3( 0.000,  0.851,  0.526);
+const vec3 gd_n15 = vec3( 0.000, -0.851,  0.526);
+const vec3 gd_n16 = vec3( 0.526,  0.000,  0.851);
+const vec3 gd_n17 = vec3(-0.526,  0.000,  0.851);
+const vec3 gd_n18 = vec3( 0.851,  0.526,  0.000);
+const vec3 gd_n19 = vec3(-0.851,  0.526,  0.000);
+float de_octahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_dodecahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_icosahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_toctahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n1)), e);
+    s += pow(abs(dot(p, gd_n2)), e);
+    s += pow(abs(dot(p, gd_n3)), e);
+    s += pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5)), e);
+    s += pow(abs(dot(p, gd_n6)), e);
+    s += pow(abs(dot(p, gd_n7)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+float de_ticosahedral(vec3 p, float e, float r)
+{
+    float s = pow(abs(dot(p, gd_n4)), e);
+    s += pow(abs(dot(p, gd_n5 )), e);
+    s += pow(abs(dot(p, gd_n6 )), e);
+    s += pow(abs(dot(p, gd_n7 )), e);
+    s += pow(abs(dot(p, gd_n8 )), e);
+    s += pow(abs(dot(p, gd_n9 )), e);
+    s += pow(abs(dot(p, gd_n10)), e);
+    s += pow(abs(dot(p, gd_n11)), e);
+    s += pow(abs(dot(p, gd_n12)), e);
+    s += pow(abs(dot(p, gd_n13)), e);
+    s += pow(abs(dot(p, gd_n14)), e);
+    s += pow(abs(dot(p, gd_n15)), e);
+    s += pow(abs(dot(p, gd_n16)), e);
+    s += pow(abs(dot(p, gd_n17)), e);
+    s += pow(abs(dot(p, gd_n18)), e);
+    s += pow(abs(dot(p, gd_n19)), e);
+    s = pow(s, 1.0 / e);
+    return s - r;
+}
+
 bool intersect_triangle( vec3 orig
                        , vec3 dir
                        , vec3 vert0
@@ -312,6 +405,8 @@ float de_cornell_box(vec3 pos)
                                           texelFetch(cornell_geom, i * 3 + 1, 0).xyz,
                                           texelFetch(cornell_geom, i * 3 + 2, 0).xyz));
     }
+    // dist = min(dist, de_toctahedral(pos + vec3(-0.17, -0.28, -0.03), 40, 0.175));
+    // dist = min(dist, de_ticosahedral(pos + vec3(0.2, 0.05, 0.2), 40, 0.175));
     return dist;
 }
 
@@ -320,99 +415,6 @@ float smin(float a, float b, float k)
     // http://iquilezles.org/www/articles/smin/smin.htm
     float res = exp(-k * a) + exp(-k * b);
     return -log(res) / k;
-}
-
-// Generalized Distance Functions
-//
-// http://www.pouet.net/topic.php?which=7931&page=1#c365231
-// http://www.viz.tamu.edu/faculty/ergun/research/implicitmodeling/papers/sm99.pdf
-//
-const vec3 gd_n1  = vec3( 1.000,  0.000,  0.000);
-const vec3 gd_n2  = vec3( 0.000,  1.000,  0.000);
-const vec3 gd_n3  = vec3( 0.000,  0.000,  1.000);
-const vec3 gd_n4  = vec3( 0.577,  0.577,  0.577);
-const vec3 gd_n5  = vec3(-0.577,  0.577,  0.577);
-const vec3 gd_n6  = vec3( 0.577, -0.577,  0.577);
-const vec3 gd_n7  = vec3( 0.577,  0.577, -0.577);
-const vec3 gd_n8  = vec3( 0.000,  0.357,  0.934);
-const vec3 gd_n9  = vec3( 0.000, -0.357,  0.934);
-const vec3 gd_n10 = vec3( 0.934,  0.000,  0.357);
-const vec3 gd_n11 = vec3(-0.934,  0.000,  0.357);
-const vec3 gd_n12 = vec3( 0.357,  0.934,  0.000);
-const vec3 gd_n13 = vec3(-0.357,  0.934,  0.000);
-const vec3 gd_n14 = vec3( 0.000,  0.851,  0.526);
-const vec3 gd_n15 = vec3( 0.000, -0.851,  0.526);
-const vec3 gd_n16 = vec3( 0.526,  0.000,  0.851);
-const vec3 gd_n17 = vec3(-0.526,  0.000,  0.851);
-const vec3 gd_n18 = vec3( 0.851,  0.526,  0.000);
-const vec3 gd_n19 = vec3(-0.851,  0.526,  0.000);
-float de_octahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5)), e);
-    s += pow(abs(dot(p, gd_n6)), e);
-    s += pow(abs(dot(p, gd_n7)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_dodecahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n14)), e);
-    s += pow(abs(dot(p, gd_n15)), e);
-    s += pow(abs(dot(p, gd_n16)), e);
-    s += pow(abs(dot(p, gd_n17)), e);
-    s += pow(abs(dot(p, gd_n18)), e);
-    s += pow(abs(dot(p, gd_n19)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_icosahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5 )), e);
-    s += pow(abs(dot(p, gd_n6 )), e);
-    s += pow(abs(dot(p, gd_n7 )), e);
-    s += pow(abs(dot(p, gd_n8 )), e);
-    s += pow(abs(dot(p, gd_n9 )), e);
-    s += pow(abs(dot(p, gd_n10)), e);
-    s += pow(abs(dot(p, gd_n11)), e);
-    s += pow(abs(dot(p, gd_n12)), e);
-    s += pow(abs(dot(p, gd_n13)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_toctahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n1)), e);
-    s += pow(abs(dot(p, gd_n2)), e);
-    s += pow(abs(dot(p, gd_n3)), e);
-    s += pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5)), e);
-    s += pow(abs(dot(p, gd_n6)), e);
-    s += pow(abs(dot(p, gd_n7)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
-}
-float de_ticosahedral(vec3 p, float e, float r)
-{
-    float s = pow(abs(dot(p, gd_n4)), e);
-    s += pow(abs(dot(p, gd_n5 )), e);
-    s += pow(abs(dot(p, gd_n6 )), e);
-    s += pow(abs(dot(p, gd_n7 )), e);
-    s += pow(abs(dot(p, gd_n8 )), e);
-    s += pow(abs(dot(p, gd_n9 )), e);
-    s += pow(abs(dot(p, gd_n10)), e);
-    s += pow(abs(dot(p, gd_n11)), e);
-    s += pow(abs(dot(p, gd_n12)), e);
-    s += pow(abs(dot(p, gd_n13)), e);
-    s += pow(abs(dot(p, gd_n14)), e);
-    s += pow(abs(dot(p, gd_n15)), e);
-    s += pow(abs(dot(p, gd_n16)), e);
-    s += pow(abs(dot(p, gd_n17)), e);
-    s += pow(abs(dot(p, gd_n18)), e);
-    s += pow(abs(dot(p, gd_n19)), e);
-    s = pow(s, 1.0 / e);
-    return s - r;
 }
 
 float distance_estimator(vec3 pos)
