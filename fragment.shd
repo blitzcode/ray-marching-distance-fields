@@ -541,6 +541,7 @@ float distance_ao_old(vec3 p, vec3 n)
 // Faster, simpler, more stable, less artifacts version of distance_ao_old()
 float distance_ao(vec3 p, vec3 n)
 {
+#ifndef CORNELL_BOX_SCENE
     float occl_sum = 0.0;
     float weight, delta;
 
@@ -556,6 +557,30 @@ float distance_ao(vec3 p, vec3 n)
     occl_sum = (clamp((occl_sum * 2 - 1) * 2.0, -1, 1) + 1) * 0.5;
     occl_sum = 1 - occl_sum;
     return occl_sum * occl_sum;
+#else
+    float occl_sum = 0.0;
+    float weight, delta;
+
+    weight = 0.1;
+    delta = 0.1;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.2;
+    delta = 0.2;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.125;
+    delta = 0.4;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    weight = 0.0625;
+    delta = 0.5;
+    occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
+
+    // Magic fudge factor to make dark parts darker and bright parts brighter
+    occl_sum = 1 - occl_sum;
+    return occl_sum;
+#endif
 }
 
 // TODO: Could try implementing SSS based on the distance_ao() function
