@@ -715,13 +715,11 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 
         // Step back from the surface a bit before computing the normal
         //
-        // This epsilon seems to be a good sweet spot for surface acne vs blurriness for
-        // the Mandelbulb, replace with something more robust
-        //
         // Experiments with trying to step back along the surface normal (cheaply computed
-        // in screen-space) did not improve results
+        // in screen-space) did not improve results. Not having the step back also works
+        // reasonably well, except in a few corner cases like infinitely thin surfaces
         //
-        vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.001);
+        vec3 isec_n = normal_backward_difference(isec_pos - dir * 0.00001);
         // vec3 isec_n = normal_screen_space_isec(isec_pos);
 
         // TODO: We can fix some numerical problems when computing normals by switching to
