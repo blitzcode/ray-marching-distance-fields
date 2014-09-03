@@ -554,9 +554,16 @@ float distance_ao(vec3 p, vec3 n)
     occl_sum += weight * clamp(1.0 - distance_estimator(p + n * delta) / delta, 0.0, 1.0);
 
     // Magic fudge factor to make dark parts darker and bright parts brighter
-    occl_sum = (clamp((occl_sum * 2 - 1) * 2.0, -1, 1) + 1) * 0.5;
-    occl_sum = 1 - occl_sum;
-    return occl_sum * occl_sum;
+    occl_sum  = 1 - occl_sum;
+    occl_sum -= 0.29;
+    occl_sum *= 3.5;
+    occl_sum *= occl_sum;
+    occl_sum  = clamp(occl_sum, 0, 1);
+    return occl_sum;
+
+    //occl_sum = (clamp((occl_sum * 2 - 1) * 2.0, -1, 1) + 1) * 0.5;
+    //occl_sum = 1 - occl_sum;
+    //return occl_sum * occl_sum;
 #else
     float occl_sum = 0.0;
     float weight, delta;
@@ -790,16 +797,17 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
         */
 
         float fresnel     = fresnel_conductor(dot(-dir, isec_n), 0.4, 0.8);
-        float diff_weight = 0.4;
-        vec3  diff_col    = vec3(1.0, 0.8, 0.8);
-        vec3  spec_col    = vec3(0.8, 0.8, 1.0);
+        //fresnel = 1;
+        float diff_weight = 0.5;
+        vec3  diff_col    = vec3(1, 0.8, 0.8);
+        vec3  spec_col    = vec3(0.8, 0.8, 1);
         float spec_weight = 1.0 - diff_weight;
         color =
         (
           texture(env_cos_1, isec_n).xyz * diff_col * diff_weight
-          + texture(env_cos_64, reflect(dir, isec_n)).xyz * spec_col * normalize_phong_lobe(64) * fresnel * spec_weight
+          + texture(env_cos_8, reflect(dir, isec_n)).xyz * spec_col * normalize_phong_lobe(8) * fresnel * spec_weight
           + texture(env_reflection, reflect(dir, isec_n)).xyz * spec_weight * fresnel * 0.1
-        ) * 3 * ao;
+        ) * 3.0 * ao;
         //color = vec3(fresnel);
         //color = vec3(ao);
         //color = vec3(1,0,1);
@@ -811,6 +819,7 @@ vec3 render_ray(vec3 origin, vec3 dir, mat4x4 camera)
 #define BG_GRADIENT
 #ifdef BG_GRADIENT
         //return mix(vec3(1, 0.4, 0), vec3(0, 0.51, 0.51), gl_FragCoord.y / in_screen_hgt);
+        //return mix(vec3(1), vec3(0), gl_FragCoord.y / in_screen_hgt);
         return texture(env_reflection, dir).xyz;
 #else
         return vec3(0);
