@@ -4,3 +4,4 @@ dist/
 rmdf.prof
 *.png
 latlong_envmaps/*.hdr
+.stack-work/
