@@ -18,7 +18,7 @@ import Text.Printf
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLR
+import qualified Graphics.GL as GLR
 import qualified Codec.Picture as JP
 import qualified Codec.Picture.Types as JPT
 import Linear
@@ -123,7 +123,7 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
         setTextureFiltering GL.TextureCubeMap TFMagOnly
         -- Apparently some older GPUs / drivers have issues with this, a simple
         -- 'setTextureClampST GL.TextureCubeMap' might also be sufficient
-        GLR.glEnable GLR.gl_TEXTURE_CUBE_MAP_SEAMLESS
+        GLR.glEnable GLR.GL_TEXTURE_CUBE_MAP_SEAMLESS
         -- Fill all six cube map faces
         let w    = JP.imageWidth latlong `div` 3 -- Three is a slight increase in texels,
                                                  -- four is a slight reduction
@@ -175,7 +175,7 @@ resizeHDRImage src dstw =
       taps  = ceiling $ scale :: Int
       ntaps = fromIntegral $ taps * taps
       step  = scale / fromIntegral taps
-      scaled dstx dsty =
+      resized dstx dsty =
         let srcx1 = fromIntegral dstx * scale
             srcy1 = fromIntegral dsty * scale
          in (\(JP.PixelRGBF r g b) -> JP.PixelRGBF (r / ntaps) (g / ntaps) (b / ntaps)) $ foldl'
@@ -192,7 +192,7 @@ resizeHDRImage src dstw =
                 | y <- [0..taps - 1]
                 , x <- [0..taps - 1]
               ]
-   in JP.generateImage scaled dstw dsth
+   in JP.generateImage resized dstw dsth
 
 -- TODO: There's plenty of room for improvement regarding our handling of pre-convolved
 --       environment maps. We could do the convolution in frequency space with SH,

@@ -4,7 +4,6 @@ module ConcurrentSegments ( makeNSegments
                           ) where
 
 import Data.Maybe
-import Control.Applicative
 import Control.Concurrent.Async
 import GHC.Conc (getNumProcessors)
 

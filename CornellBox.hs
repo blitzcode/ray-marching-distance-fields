@@ -28,7 +28,7 @@ mkCornellBoxVerticesTex =
             numVtx  = numTri * 3
             toUnit  = 559.2 / 2
             scale   = 1 / (sqrt (2 * 2 + 2 * 2 + 2 * 2) / 2) * 0.99
-            vtx     = flip concatMap [0..numQuad - 1] $ \quadIdx ->
+            vtx     = flip concatMap ([0..numQuad - 1] :: [Int]) $ \quadIdx ->
                           [ ((cornellBox V.! (quadIdx * 4 + 0)) / toUnit - 1) ^* scale
                           , ((cornellBox V.! (quadIdx * 4 + 1)) / toUnit - 1) ^* scale
                           , ((cornellBox V.! (quadIdx * 4 + 3)) / toUnit - 1) ^* scale

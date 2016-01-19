@@ -3,7 +3,8 @@
              , OverloadedStrings
              , LambdaCase
              , FlexibleContexts
-             , BangPatterns #-}
+             , BangPatterns
+             , ScopedTypeVariables #-}
 
 module QuadRendering ( withQuadRenderer
                      , QuadRenderer
@@ -24,7 +25,6 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Data.Vector.Mutable as VM
 import Data.List
-import Control.Applicative
 import Control.Monad
 import Control.Exception
 import Control.Monad.IO.Class
@@ -183,7 +183,7 @@ data QuadRenderBuffer = QuadRenderBuffer
 -- Prepare data structures and render when inner exits. This is meant to be called once or
 -- more per-frame. Runs its inner inside the base monad. Takes width and height so it
 -- knows how to setup the orthographic projection for the shader
-withQuadRenderBuffer :: (MonadBaseControl IO m, MonadIO m)
+withQuadRenderBuffer :: forall a m. (MonadBaseControl IO m, MonadIO m)
                      => QuadRenderer
                      -> Int
                      -> Int
@@ -217,7 +217,9 @@ withQuadRenderBuffer qbQR@(QuadRenderer { .. }) w h f = do
                 )
                 ( \mf -> do traceS TLError $
                                 "withQuadRenderBuffer - VBO mapping failure: " ++ show mf
-                            run $ return Nothing
+                            -- Looks like since the 1.0.0.0 change in monad-control we need
+                            -- some type annotations for this to work
+                            run $ (return Nothing :: m (Maybe (a, QuadRenderBuffer)))
                 )
     case r of
         Nothing       -> return Nothing

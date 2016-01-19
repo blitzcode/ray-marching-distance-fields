@@ -4,7 +4,6 @@
 module Main (main) where
 
 import GHC.Conc (getNumProcessors)
-import Control.Applicative
 import Control.Concurrent (setNumCapabilities)
 import Control.Concurrent.STM.TQueue
 import Data.List

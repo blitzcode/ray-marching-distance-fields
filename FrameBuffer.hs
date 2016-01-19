@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE RecordWildCards, FlexibleContexts, LambdaCase, ScopedTypeVariables #-}
 
 module FrameBuffer ( withFrameBuffer
                    , fillFrameBuffer
@@ -13,12 +13,11 @@ module FrameBuffer ( withFrameBuffer
                    ) where
 
 import Control.Monad
-import Control.Applicative
 import Control.Exception
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLR
+import qualified Graphics.GL as GLR
 import Data.Word
 import Data.IORef
 import qualified Data.Vector.Storable.Mutable as VSM
@@ -107,7 +106,7 @@ getFrameBufferDim :: FrameBuffer -> IO (Int, Int)
 getFrameBufferDim fb = readIORef $ fbDim fb
 
 -- Specify the frame buffer contents by filling a mutable vector
-fillFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
+fillFrameBuffer :: forall a m s. (MonadBaseControl IO m, MonadIO m)
                 => FrameBuffer
                 -> (Int -> Int -> VSM.MVector s Word32 -> m a) -- Run inner inside the base monad
                 -> m (Maybe a)                                 -- Return Nothing if mapping fails
@@ -131,14 +130,16 @@ fillFrameBuffer fb@(FrameBuffer { .. }) f = do
                           -- modified the bound buffer objects
             )
             ( \mf -> do traceS TLError $ "fillFrameBuffer - PBO mapping failure: " ++ show mf
-                        run $ return Nothing
+                        -- Looks like since the 1.0.0.0 change in monad-control we need
+                        -- some type annotations for this to work
+                        run $ (return Nothing :: m (Maybe a))
             )
     liftIO $ do
       -- Update frame buffer texture from the PBO data
       GL.textureBinding GL.Texture2D GL.$= Just fbTex
       texImage2DNullPtr w h
       when (fbDownscaling == HighQualityDownscaling) $
-          GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
+          GLR.glGenerateMipmap GLR.GL_TEXTURE_2D
       -- Done
       GL.bindBuffer GL.PixelUnpackBuffer GL.$= Nothing
       GL.textureBinding GL.Texture2D GL.$= Nothing
@@ -157,7 +158,7 @@ texImage2DNullPtr w h =
 
 -- Specify the frame buffer contents by rendering into it
 -- http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-14-render-to-texture/
-drawIntoFrameBuffer :: (MonadBaseControl IO m, MonadIO m)
+drawIntoFrameBuffer :: forall a m. (MonadBaseControl IO m, MonadIO m)
                     => FrameBuffer
                     -> (Int -> Int -> m a)
                     -> m (Maybe a)
@@ -170,13 +171,15 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
              -- GL.framebufferStatus is unfortunately broken in OpenGL 2.9.2.0
              -- (see https://github.com/haskell-opengl/OpenGL/issues/51), so
              -- we're using the raw APIs as a backup
-             GLR.glCheckFramebufferStatus GLR.gl_FRAMEBUFFER >>= \case
-                 r | r == GLR.gl_FRAMEBUFFER_COMPLETE -> run $ Just <$> f w h
+             GLR.glCheckFramebufferStatus GLR.GL_FRAMEBUFFER >>= \case
+                 r | r == GLR.GL_FRAMEBUFFER_COMPLETE -> run $ Just <$> f w h
                    | otherwise                        -> do
                          traceS TLError $ printf
                              "drawIntoFrameBuffer, glCheckFramebufferStatus: 0x%x"
                              (fromIntegral r :: Int)
-                         run $ return Nothing
+                         -- Looks like since the 1.0.0.0 change in monad-control we need
+                         -- some type annotations for this to work
+                         run $ (return Nothing :: m (Maybe a))
         )
         ( do GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
              GL.viewport                       GL.$= oldVP
@@ -187,7 +190,7 @@ drawIntoFrameBuffer FrameBuffer { .. } f = do
                  --       into a tile sized texture (later copied into the full frame
                  --       buffer) to address this
                  GL.textureBinding GL.Texture2D GL.$= Just fbTex
-                 GLR.glGenerateMipmap GLR.gl_TEXTURE_2D
+                 GLR.glGenerateMipmap GLR.GL_TEXTURE_2D
                  GL.textureBinding GL.Texture2D GL.$= Nothing
         )
 

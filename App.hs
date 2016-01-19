@@ -17,7 +17,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.STM
 import Control.Concurrent.STM.TQueue
-import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Text.Printf

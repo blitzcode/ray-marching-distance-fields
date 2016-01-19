@@ -17,7 +17,6 @@ import qualified System.Console.ANSI as A
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
-import Control.Applicative
 import Control.Concurrent
 import qualified Data.Text as T
 import qualified Data.Text.IO as TI

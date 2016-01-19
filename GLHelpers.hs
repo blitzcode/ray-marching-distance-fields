@@ -18,9 +18,8 @@ module GLHelpers ( getGLStrings
                  ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLR
+import qualified Graphics.GL as GLR
 import qualified Graphics.UI.GLFW as GLFW
-import Control.Applicative
 import Control.Monad
 import Control.Exception
 import Control.Monad.Trans.Resource
@@ -53,10 +52,10 @@ throwOnGLError context = getErrors context >>= maybe (return ()) (throwIO . Erro
 getNumExtensions :: IO Int
 getNumExtensions =
     alloca $ \(ptr :: Ptr GLR.GLint) ->
-        GLR.glGetIntegerv GLR.gl_NUM_EXTENSIONS ptr >> fromIntegral <$> peek ptr
+        GLR.glGetIntegerv GLR.GL_NUM_EXTENSIONS ptr >> fromIntegral <$> peek ptr
 getExtensionStr :: Int -> IO String
 getExtensionStr i =
-    peekCString =<< castPtr <$> GLR.glGetStringi GLR.gl_EXTENSIONS (fromIntegral i)
+    peekCString =<< castPtr <$> GLR.glGetStringi GLR.GL_EXTENSIONS (fromIntegral i)
 
 getGLExtensionList :: IO [String]
 getGLExtensionList =
@@ -67,9 +66,9 @@ getGLExtensionList =
 maxRenderSize :: IO (Int, Int)
 maxRenderSize =
     withArray [0, 0] $ \ptr -> do
-        GLR.glGetIntegerv GLR.gl_MAX_VIEWPORT_DIMS ptr
+        GLR.glGetIntegerv GLR.GL_MAX_VIEWPORT_DIMS ptr
         [vpWdh, vpHgt] <- peekArray 2 ptr
-        GLR.glGetIntegerv GLR.gl_MAX_TEXTURE_SIZE ptr
+        GLR.glGetIntegerv GLR.GL_MAX_TEXTURE_SIZE ptr
         texDim <- peek ptr
         return (fromIntegral $ min vpWdh texDim, fromIntegral $ max vpHgt texDim)
 

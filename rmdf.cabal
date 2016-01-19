@@ -19,7 +19,7 @@ executable rmdf
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base >=4.7 && <4.9,
+  build-depends:       base >=4.7 && <5,
                        -- Want ExceptT and modify'
                        mtl >= 2.2.1,
                        transformers,
@@ -27,7 +27,8 @@ executable rmdf
                        linear >= 1.10.1.1,
                        GLFW-b,
                        OpenGL >= 2.9.2.0,
-                       OpenGLRaw,
+                       -- After the namespace change
+                       OpenGLRaw >= 3.0.0.0,
                        loop,
                        stm,
                        vector >= 0.10.11.0,

@@ -1,5 +1,5 @@
 
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, TypeFamilies #-}
 
 module Fractal2D ( mandelbrot
                  , juliaAnimated

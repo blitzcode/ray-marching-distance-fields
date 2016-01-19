@@ -9,7 +9,7 @@ module GLSLHelpers ( mkShaderProgram
                    ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLR
+import qualified Graphics.GL as GLR
 import qualified Data.ByteString as B
 import Data.Either
 import Control.Exception

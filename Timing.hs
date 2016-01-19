@@ -5,7 +5,6 @@ module Timing ( getTick
 
 import Control.Exception
 import Data.Time.Clock
-import Control.Applicative
 import Control.Monad.IO.Class
 import System.IO.Unsafe
 
