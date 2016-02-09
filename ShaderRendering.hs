@@ -67,6 +67,8 @@ withShaderRenderer srShdFn reflMapFn f = do
              reflMap <- either throwError return =<< liftIO (loadHDRImage reflMapFn)
                         -- Build debug environment map
                         -- return buildTestLatLongEnvMap
+             liftIO $ do let scaled = resizeHDRImage reflMap 256
+                         latLongHDREnvMapToCubeMap scaled False $ Just ("./export/enis/env_cos_0")
              -- Build / verify cache of pre-convolved environment maps
              let powers = [1, 8, 64, 512]
                  mkCacheFn pow | pow == 0  = reflMapFn
@@ -78,16 +80,17 @@ withShaderRenderer srShdFn reflMapFn f = do
              --
              -- TODO: Speed up load time by loading and converting environment map texture in a
              --       background thread, display white or a cached scale version in the meantime
-             let convertAndAllocCM envMap =
-                     snd <$> allocate (latLongHDREnvMapToCubeMap envMap False) GL.deleteObjectName
+             let convertAndAllocCM envMap fn = snd <$> allocate
+                     (latLongHDREnvMapToCubeMap envMap False fn) GL.deleteObjectName
              envCubeMaps <- forM powfn $ \(pow, fn) -> do
+                 let uniform_name = "env_cos_" ++ show (round pow :: Int)
                  envMap <- either throwError return =<< liftIO (loadHDRImage fn)
-                 tex    <- convertAndAllocCM envMap
-                 return ( "env_cos_" ++ show (round pow :: Int) -- Shader uniform name
-                        , tex                                   -- Cube map texture
+                 tex    <- convertAndAllocCM envMap $ Just ("./export/enis/" ++ uniform_name)
+                 return ( uniform_name -- Shader uniform name
+                        , tex          -- Cube map texture
                         )
              -- Add regular reflection environment map and store in record
-             reflCubeMap <- convertAndAllocCM reflMap
+             reflCubeMap <- convertAndAllocCM reflMap Nothing
              let srEnvCubeMaps = ("env_reflection", reflCubeMap) : envCubeMaps
              envEnd <- liftIO getTick
              -- Create fragment shaders

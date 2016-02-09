@@ -17,6 +17,7 @@ import Data.List
 import Text.Printf
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Storable.Mutable as VSM
+import qualified Data.Vector.Storable as VS
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLR
 import qualified Codec.Picture as JP
@@ -33,7 +34,7 @@ loadHDRImage fn = do
     JP.readImage fn >>= \case
         Right (JP.ImageRGBF img) -> do
             -- Trace intensity bounds of the image
-            when (False) $
+            when (True) $
                 let (minIntensity, maxIntensity, avgIntensity) = JPT.pixelFold
                       (\(!minI, !maxI, !avgI) _ _ (JP.PixelRGBF r g b) ->
                            let int = (r + g + b) / 3
@@ -115,8 +116,8 @@ pixelAtBilinear img u v =
 -- Transform a latitude / longitude format environment map into a cube map texture. This
 -- creates some distortion and we only use basic bilinear lookups (no full texel coverage)
 -- for the resampling, introducing artifacts in the process. Results look fairly good, though
-latLongHDREnvMapToCubeMap :: JP.Image JP.PixelRGBF -> Bool -> IO GL.TextureObject
-latLongHDREnvMapToCubeMap latlong debugFaceColorize =
+latLongHDREnvMapToCubeMap :: JP.Image JP.PixelRGBF -> Bool -> Maybe FilePath -> IO GL.TextureObject
+latLongHDREnvMapToCubeMap latlong debugFaceColorize mbFnPrefix =
     bracketOnError GL.genObjectName GL.deleteObjectName $ \tex -> do
         -- Setup cube map
         GL.textureBinding GL.TextureCubeMap GL.$= Just tex
@@ -125,7 +126,7 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
         -- 'setTextureClampST GL.TextureCubeMap' might also be sufficient
         GLR.glEnable GLR.GL_TEXTURE_CUBE_MAP_SEAMLESS
         -- Fill all six cube map faces
-        let w    = JP.imageWidth latlong `div` 3 -- Three is a slight increase in texels,
+        let w    = JP.imageWidth latlong `div` 4 -- Three is a slight increase in texels,
                                                  -- four is a slight reduction
             size = GL.TextureSize2D (fromIntegral w) (fromIntegral w)
         forM_ [ GL.TextureCubeMapPositiveX
@@ -159,6 +160,21 @@ latLongHDREnvMapToCubeMap latlong debugFaceColorize =
             -- Upload and let OpenGL convert to half floats
             VSM.unsafeWith faceImg $
                 GL.texImage2D face GL.NoProxy 0 GL.RGB16F size 0 . GL.PixelData GL.RGB GL.Float
+            -- Optionally write out the cube map face to a file
+            case mbFnPrefix of
+                Just pref -> do let faceToStr = \case GL.TextureCubeMapPositiveX -> "x+"
+                                                      GL.TextureCubeMapNegativeX -> "x-"
+                                                      GL.TextureCubeMapPositiveY -> "y+"
+                                                      GL.TextureCubeMapNegativeY -> "y-"
+                                                      GL.TextureCubeMapPositiveZ -> "z+"
+                                                      GL.TextureCubeMapNegativeZ -> "z-"
+                                    fn = printf "%s_%s.hdr" pref (faceToStr face)
+                                traceS TLInfo $ printf "Written converted cube map face to '%s'" fn
+                                JP.saveRadianceImage fn
+                                    =<< JP.ImageRGBF . JP.Image w w . VS.concatMap
+                                        (\(V3 r g b) -> VS.fromList [r, g, b])
+                                            <$> VS.freeze faceImg
+                Nothing   -> return ()
         traceOnGLError $ Just "latLongHDREnvMapToCubeMap"
         return tex
 
