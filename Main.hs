@@ -51,7 +51,7 @@ main = do
           h = 512
           shdFn     = "./fragment.shd"
           reflMapFn = "./latlong_envmaps/uffizi_512.hdr"
-       in withWindow w h "Viewer" _aeGLFWEventsQueue $ \_aeWindow ->
+       in withWindow w h False "Viewer" _aeGLFWEventsQueue $ \_aeWindow ->
           withFontTexture $ \_aeFontTexture ->
           withFrameBuffer w h HighQualityDownscaling $ \_aeFB ->
           withQuadRenderer 16384 $ \_aeQR ->
